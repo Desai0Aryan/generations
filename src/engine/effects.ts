@@ -3,6 +3,9 @@ import { EDU_RANK } from './types.ts';
 import { FIRST_NAMES } from './names.ts';
 import { freshName, int, uid } from './rng.ts';
 import { fill } from './text.ts';
+import { amortize } from './finance.ts';
+import { FIELD_BY_ID } from '../content/jobs.ts';
+import { MAJORS, TIER_INFO } from '../content/education.ts';
 
 export interface EffectContext {
   targetId?: string;
@@ -69,17 +72,25 @@ export function applyEffects(s: GameState, effects: Effect[], ctx: EffectContext
       case 'endRel': {
         const t = target();
         if (!t) break;
-        if (t.kind === 'partner') {
+        if (t.kind === 'partner' || t.kind === 'fling') {
+          if (t.kind === 'partner') {
+            ch.flags.married = false;
+            ch.flags.cohabit = false;
+          }
           t.kind = 'ex';
           t.closeness = Math.min(t.closeness, 20);
-          ch.flags.married = false;
         } else {
           t.closeness = clamp(t.closeness - 40);
         }
         break;
       }
+      case 'relkind': {
+        const t = target();
+        if (t) t.kind = e.kind;
+        break;
+      }
       case 'job':
-        ch.job = { title: e.title, salary: e.salary, years: 0 };
+        ch.job = { title: e.title, salary: e.salary, years: 0, field: e.field, level: 0, lvlYears: 0, perf: 50 };
         ch.lastJob = e.title;
         ch.retired = false;
         break;
@@ -95,6 +106,65 @@ export function applyEffects(s: GameState, effects: Effect[], ctx: EffectContext
       case 'edu':
         if (EDU_RANK[e.level] > EDU_RANK[ch.education]) ch.education = e.level;
         break;
+      case 'skill':
+        ch.skills[e.k] = clamp(ch.skills[e.k] + e.d);
+        break;
+      case 'perf':
+        if (ch.job) ch.job.perf = clamp((ch.job.perf ?? 50) + e.d);
+        break;
+      case 'hire': {
+        const f = FIELD_BY_ID[e.field];
+        if (!f) break;
+        const lvl = ch.job?.field === f.id ? ch.job.level ?? 0 : 0;
+        const rung = f.ladder[Math.min(lvl, f.ladder.length - 1)];
+        ch.job = { title: rung.title, salary: rung.salary, years: 0, field: f.id, level: lvl, lvlYears: 0, perf: 50 };
+        ch.lastJob = rung.title;
+        ch.retired = false;
+        delete ch.flags.reference;
+        break;
+      }
+      case 'enroll': {
+        const info = TIER_INFO[e.tier];
+        ch.school = { tier: e.tier, kind: e.kind ?? 'college', years: 0, length: e.length ?? info.length, tuition: e.tuition ?? info.tuition, gpa: 3.0, degree: e.degree };
+        ch.flags.inCollege = true;
+        ch.stats.reputation = clamp(ch.stats.reputation + info.rep);
+        break;
+      }
+      case 'major': {
+        const m = MAJORS.find((x) => x.id === e.name);
+        for (const k of Object.keys(ch.flags)) if (k.startsWith('major_')) delete ch.flags[k];
+        ch.major = m?.label ?? e.name;
+        ch.flags[`major_${e.name}`] = true;
+        break;
+      }
+      case 'gpa':
+        if (ch.school) ch.school.gpa = Math.max(1, Math.min(4, Math.round((ch.school.gpa + e.d) * 100) / 100));
+        break;
+      case 'dropout':
+        ch.school = undefined;
+        ch.flags.inCollege = false;
+        break;
+      case 'loan': {
+        ch.money += e.amount;
+        s.loans.push({ id: uid(s, 'l'), label: e.label, balance: e.amount, rate: e.rate, yearly: amortize(e.amount, e.rate, e.years) });
+        break;
+      }
+      case 'payDebt': {
+        let pay = Math.max(0, Math.min(e.amount, ch.money));
+        for (const l of [...s.loans].sort((a, b) => b.rate - a.rate)) {
+          if (pay <= 0) break;
+          const p = Math.min(pay, l.balance);
+          l.balance -= p;
+          pay -= p;
+          ch.money -= p;
+        }
+        for (const l of s.loans.filter((x) => x.balance <= 0)) {
+          const a = s.assets.find((x) => x.loanId === l.id);
+          if (a) a.loanId = undefined;
+        }
+        s.loans = s.loans.filter((x) => x.balance > 0);
+        break;
+      }
       case 'die':
         ctx.died = e.cause;
         break;

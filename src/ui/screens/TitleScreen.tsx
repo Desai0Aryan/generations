@@ -1,43 +1,56 @@
 import React, { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Button, Card } from '../components.tsx';
+import { Button, Card, Chip } from '../components.tsx';
+import { Scene } from '../art.tsx';
 import { colors, serif } from '../theme.ts';
 import { useGame } from '../../store/GameContext.tsx';
+import { ACHIEVEMENTS } from '../../content/achievements.ts';
+import { useEntrance } from '../fx.ts';
 
 export function TitleScreen({ onNew }: { onNew: () => void }) {
-  const { hasSave, resume, resetSave, accent } = useGame();
+  const { hasSave, resume, resetSave, accent, meta, setHaptics } = useGame();
   const [settings, setSettings] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const p = useEntrance(900);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24, paddingTop: 70 }}>
-        <View style={{ alignItems: 'center', marginBottom: 36 }}>
-          <Text style={{ fontSize: 54, marginBottom: 6 }}>🌳</Text>
-          <Text style={{ color: colors.text, fontFamily: serif, fontSize: 38, letterSpacing: 3 }}>GENERATIONS</Text>
-          <Text style={{ color: colors.muted, marginTop: 8, fontSize: 15 }}>Live. Build. Pass it on.</Text>
-          <View style={{ height: 2, width: 60, backgroundColor: accent, marginTop: 18, borderRadius: 1 }} />
+      <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 30 }}>
+        <View>
+          <Scene stage="young" height={330} />
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', opacity: p, transform: [{ translateY: (1 - p) * 20 }] }}>
+            <Text style={{ fontSize: 60 }}>🌳</Text>
+            <Text style={{ color: '#FFFFFF', fontFamily: serif, fontSize: 38, letterSpacing: 3, marginTop: 4 }}>GENERATIONS</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.85)', marginTop: 6, fontSize: 15 }}>Live. Build. Pass it on.</Text>
+            <View style={{ height: 2, width: 60, backgroundColor: accent, marginTop: 14, borderRadius: 1 }} />
+          </View>
         </View>
 
-        {hasSave ? <Button label="Continue Legacy" sub="Pick up where your family left off" icon="📜" onPress={resume} style={{ marginBottom: 12 }} /> : null}
-        <Button label="New Bloodline" sub="Start a new family" icon="🌱" variant={hasSave ? 'ghost' : 'primary'} onPress={onNew} style={{ marginBottom: 12 }} />
-        <Button label="Settings" icon="⚙️" variant="ghost" onPress={() => setSettings((s) => !s)} style={{ marginBottom: 12 }} />
+        <View style={{ padding: 22, paddingTop: 24 }}>
+          {hasSave ? <Button label="Continue Legacy" sub="Pick up where your family left off" icon="📜" onPress={resume} style={{ marginBottom: 12 }} /> : null}
+          <Button label="New Bloodline" sub="Start a new family" icon="🌱" variant={hasSave ? 'ghost' : 'primary'} onPress={onNew} style={{ marginBottom: 12 }} />
+          <Button label="Settings" icon="⚙️" variant="ghost" onPress={() => setSettings((s) => !s)} style={{ marginBottom: 12 }} />
+          <Text style={{ color: colors.muted, textAlign: 'center', fontSize: 12, marginTop: 4 }}>🏆 {meta.achievements.length} of {ACHIEVEMENTS.length} trophies earned</Text>
 
-        {settings ? (
-          <Card style={{ marginTop: 4 }}>
-            <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 6 }}>Settings</Text>
-            <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>Your progress saves automatically on this device.</Text>
-            {confirm ? (
-              <View>
-                <Text style={{ color: colors.danger, marginBottom: 10 }}>This permanently deletes your saved family. Are you sure?</Text>
-                <Button label="Yes, delete everything" variant="ghost" onPress={async () => { await resetSave(); setConfirm(false); setSettings(false); }} style={{ marginBottom: 8 }} />
-                <Button label="Cancel" variant="ghost" onPress={() => setConfirm(false)} />
+          {settings ? (
+            <Card style={{ marginTop: 14 }}>
+              <Text style={{ color: colors.text, fontWeight: '700', marginBottom: 8 }}>Settings</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 4 }}>
+                <Chip label={meta.haptics ? 'Haptics: on' : 'Haptics: off'} selected={meta.haptics} onPress={() => setHaptics(!meta.haptics)} />
               </View>
-            ) : (
-              <Button label="Delete saved game" variant="ghost" onPress={() => setConfirm(true)} />
-            )}
-          </Card>
-        ) : null}
+              <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>Your progress saves automatically on this device.</Text>
+              {confirm ? (
+                <View>
+                  <Text style={{ color: colors.danger, marginBottom: 10 }}>This permanently deletes your saved family. Are you sure?</Text>
+                  <Button label="Yes, delete everything" variant="ghost" onPress={async () => { await resetSave(); setConfirm(false); setSettings(false); }} style={{ marginBottom: 8 }} />
+                  <Button label="Cancel" variant="ghost" onPress={() => setConfirm(false)} />
+                </View>
+              ) : (
+                <Button label="Delete saved game" variant="ghost" onPress={() => setConfirm(true)} />
+              )}
+            </Card>
+          ) : null}
+        </View>
       </ScrollView>
     </View>
   );

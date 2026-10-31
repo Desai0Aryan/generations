@@ -21,6 +21,14 @@ export async function loadGame(): Promise<GameState | null> {
 function migrate(g: GameState): GameState | null {
   if (!g || typeof g !== 'object' || !g.character) return null;
   if (g.version > SAVE_VERSION) return null;
+  // v1 -> v2: skills, assets, loans, action log
+  const ch = g.character as GameState['character'];
+  if (!ch.skills) ch.skills = { athletics: 25, creativity: 25, tech: 20, charisma: 30 };
+  if (!g.assets) g.assets = [];
+  if (!g.loans) g.loans = [];
+  if (!g.actionLog) g.actionLog = {};
+  if (typeof g.actionsLeft !== 'number' || g.actionsLeft > 5) g.actionsLeft = 5;
+  g.version = SAVE_VERSION;
   return g;
 }
 
@@ -48,5 +56,24 @@ export async function loadEntitlements(): Promise<Entitlements> {
 export async function saveEntitlements(e: Entitlements): Promise<void> {
   try {
     await AsyncStorage.setItem(ENT_KEY, JSON.stringify(e));
+  } catch {}
+}
+
+// Settings and achievements live outside any one save: they belong to the player, across every family.
+export interface Meta { achievements: string[]; haptics: boolean }
+const META_KEY = 'generations.meta.v1';
+
+export async function loadMeta(): Promise<Meta> {
+  try {
+    const raw = await AsyncStorage.getItem(META_KEY);
+    return raw ? { achievements: [], haptics: true, ...(JSON.parse(raw) as Partial<Meta>) } : { achievements: [], haptics: true };
+  } catch {
+    return { achievements: [], haptics: true };
+  }
+}
+
+export async function saveMeta(m: Meta): Promise<void> {
+  try {
+    await AsyncStorage.setItem(META_KEY, JSON.stringify(m));
   } catch {}
 }

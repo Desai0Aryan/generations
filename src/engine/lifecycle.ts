@@ -11,16 +11,19 @@ import type {
   PendingEvent,
   Relationship,
 } from './types.ts';
-import { EDU_RANK, SAVE_VERSION } from './types.ts';
-import { chance, freshName, int, pick, uid, weightedPick } from './rng.ts';
+import { EDU_RANK, SAVE_VERSION, SLOTS_PER_YEAR } from './types.ts';
+import { chance, freshName, int, next, pick, uid, weightedPick } from './rng.ts';
 import { check, checkAll, livingRels } from './conditions.ts';
 import { applyEffects } from './effects.ts';
 import { fill } from './text.ts';
 import { FIRST_NAMES } from './names.ts';
 import { getEvent, eventsForPacks } from '../content/index.ts';
+import { FIELD_BY_ID } from '../content/jobs.ts';
+import { DEGREE_LABEL } from '../content/education.ts';
+import { loansBalance, netWorth } from './finance.ts';
 
-const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
-const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+export const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+export const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
 export const BACKGROUNDS: Record<
   BackgroundId,
@@ -34,8 +37,8 @@ export const BACKGROUNDS: Record<
 
 // ---------- helpers ----------
 
-function addFeed(s: GameState, text: string, kind: FeedEntry['kind'] = 'event'): void {
-  s.feed.push({ id: uid(s, 'f'), age: s.character.age, year: s.year, text, kind });
+export function addFeed(s: GameState, text: string, kind: FeedEntry['kind'] = 'event', cat?: FeedEntry['cat']): void {
+  s.feed.push({ id: uid(s, 'f'), age: s.character.age, year: s.year, text, kind, cat });
   if (s.feed.length > 600) s.feed.splice(0, s.feed.length - 600);
 }
 
@@ -94,6 +97,7 @@ function buildNewGame(opts: NewGameOptions): GameState {
       money: 0,
       peakMoney: 0,
       education: 'none',
+      skills: { athletics: 20, creativity: 20, tech: 15, charisma: 25 },
       job: null,
       retired: false,
       flags: {},
@@ -106,7 +110,10 @@ function buildNewGame(opts: NewGameOptions): GameState {
     eventHistory: {},
     family: { surname: opts.lastName.trim() || 'Stonefield', generation: 1, lineage: [], familyReputation: 50 },
     packs: opts.packs,
-    actionsLeft: 3,
+    actionsLeft: SLOTS_PER_YEAR,
+    assets: [],
+    loans: [],
+    actionLog: {},
     nextId: 1,
   };
   const ch = s.character;
@@ -114,6 +121,7 @@ function buildNewGame(opts: NewGameOptions): GameState {
   ch.stats.smarts = int(s, 30, 80);
   ch.stats.looks = int(s, 30, 85);
   ch.stats.happiness = int(s, 70, 90);
+  ch.skills = { athletics: int(s, 10, 45), creativity: int(s, 10, 45), tech: int(s, 5, 35), charisma: int(s, 15, 45) };
   const bgBonus: Record<BackgroundId, number> = { working: 0, middle: 3, comfortable: 6, wealthy: 10 };
   ch.stats.reputation = 45 + bgBonus[opts.background];
 
@@ -138,7 +146,7 @@ export function ageUp(prev: GameState): GameState {
   const ch = s.character;
   s.year += 1;
   ch.age += 1;
-  s.actionsLeft = 3;
+  s.actionsLeft = SLOTS_PER_YEAR;
 
   ageRelationships(s);
   passiveYear(s);
@@ -189,7 +197,49 @@ export function labelFor(kind: Relationship['kind']): string {
     rival: 'rival',
     mentor: 'mentor',
     coworker: 'coworker',
+    fling: 'fling',
   }[kind];
+}
+
+function graduate(s: GameState): void {
+  const ch = s.character;
+  const sc = ch.school;
+  if (!sc) return;
+  const honors = sc.gpa >= 3.7;
+  const edu = sc.kind === 'grad' ? 'grad' : sc.tier === 'community' ? 'trade' : 'college';
+  if (EDU_RANK[edu] > EDU_RANK[ch.education]) ch.education = edu;
+  if (sc.degree) ch.flags[`degree_${sc.degree}`] = true;
+  ch.flags.inCollege = false;
+  ch.school = undefined;
+  ch.stats.happiness = clamp(ch.stats.happiness + 6);
+  ch.stats.reputation = clamp(ch.stats.reputation + (honors ? 4 : 1));
+  const what =
+    sc.kind === 'grad'
+      ? DEGREE_LABEL[sc.degree ?? ''] ?? 'a graduate degree'
+      : `${sc.tier === 'community' ? 'an associate degree' : "a bachelor's degree"}${ch.major ? ' in ' + ch.major : ''}`;
+  addFeed(s, `You graduate${honors ? ' with honors' : ''}, earning ${what}.`, 'milestone', 'school');
+  applyEffects(s, [{ t: 'mem', text: `Graduated with ${what}.`, tags: ['school'], weight: 2 }]);
+}
+
+function maybePromote(s: GameState): void {
+  const ch = s.character;
+  const j = ch.job;
+  if (!j?.field) return;
+  const f = FIELD_BY_ID[j.field];
+  if (!f) return;
+  const lvl = j.level ?? 0;
+  if (lvl >= f.ladder.length - 1 || (j.lvlYears ?? 0) < 2) return;
+  const p = 0.12 + (j.perf ?? 50) / 260 + (ch.stats.reputation - 50) / 600;
+  if (!chance(s, p)) return;
+  const rung = f.ladder[lvl + 1];
+  j.level = lvl + 1;
+  j.lvlYears = 0;
+  j.title = rung.title;
+  j.salary = Math.max(Math.round(j.salary * 1.12), rung.salary);
+  ch.lastJob = rung.title;
+  ch.stats.happiness = clamp(ch.stats.happiness + 4);
+  ch.stats.reputation = clamp(ch.stats.reputation + 2);
+  addFeed(s, `Promotion! You are now ${rung.title}, earning $${j.salary.toLocaleString('en-US')} a year.`, 'milestone', 'work');
 }
 
 function passiveYear(s: GameState): void {
@@ -205,35 +255,88 @@ function passiveYear(s: GameState): void {
   if (ch.age > 30) st.looks = clamp(st.looks - int(s, 0, 1));
   st.happiness = clamp(st.happiness + int(s, -2, 2) + (st.happiness > 75 ? -1 : st.happiness < 35 ? 2 : 0));
   if (ch.age >= 6 && ch.age < 18) st.smarts = clamp(st.smarts + (chance(s, 0.6) ? 1 : 0));
-
-  // college
-  if (ch.flags.inCollege) {
-    ch.money -= 9000;
-    st.smarts = clamp(st.smarts + int(s, 1, 3));
+  // skills slowly fade if you never use them
+  for (const k of Object.keys(ch.skills) as (keyof typeof ch.skills)[]) {
+    if (ch.age > 25 && ch.skills[k] > 30 && chance(s, 0.25)) ch.skills[k] = clamp(ch.skills[k] - 1);
   }
 
-  // income
+  // school
+  if (ch.school) {
+    const sc = ch.school;
+    sc.years += 1;
+    ch.money -= sc.tuition;
+    st.smarts = clamp(st.smarts + int(s, 1, 2));
+    sc.gpa = Math.max(1, Math.min(4, Math.round((sc.gpa + (st.smarts - 62) / 300 + (next(s) - 0.5) * 0.25) * 100) / 100));
+    if (sc.years >= sc.length) graduate(s);
+  }
+
+  // income & career
   if (ch.job) {
+    const j = ch.job;
     if (ch.retired) {
-      ch.money += Math.round(ch.job.salary * 0.55);
+      ch.money += Math.round(j.salary * 0.55);
     } else {
-      ch.job.years += 1;
-      ch.job.salary = Math.round(ch.job.salary * 1.015);
-      ch.money += Math.round(ch.job.salary * 0.75);
-      if (ch.age >= 70) {
+      j.years += 1;
+      j.lvlYears = (j.lvlYears ?? 0) + 1;
+      j.salary = Math.round(j.salary * 1.015);
+      j.perf = Math.max(0, (j.perf ?? 50) - 2);
+      ch.money += Math.round(j.salary * 0.75);
+      maybePromote(s);
+      if (j.field === 'sports' && ch.age >= 36) {
+        addFeed(s, 'Your body says it is time. You retire from professional sports with a full trophy shelf.', 'milestone', 'work');
+        ch.job = null;
+      } else if (j.field === 'business' && (j.perf ?? 50) < 10 && chance(s, 0.35)) {
+        addFeed(s, `Your business closes its doors. It was a brave attempt, and you learned a lot.`, 'event', 'work');
+        st.happiness = clamp(st.happiness - 7);
+        ch.money -= 6000;
+        ch.job = null;
+      } else if (j.field !== 'business' && (j.perf ?? 50) < 12 && j.years > 2 && chance(s, 0.3)) {
+        addFeed(s, `You were let go from your job as ${j.title}. Performance had slipped for too long.`, 'event', 'work');
+        st.happiness = clamp(st.happiness - 6);
+        ch.job = null;
+      } else if (ch.age >= 70) {
         ch.retired = true;
         addFeed(s, 'You retire from work and settle into a slower rhythm.', 'milestone');
       }
     }
   }
 
+  // assets: upkeep, value changes, pets
+  for (const a of [...s.assets]) {
+    a.value = Math.max(0, Math.round(a.value * (1 + a.rate)));
+    ch.money -= a.upkeep + (a.kind === 'home' ? Math.round(a.value * 0.011) : 0);
+    if (a.kind === 'pet') {
+      st.happiness = clamp(st.happiness + 1);
+      if (s.year - a.boughtYear >= 13) {
+        s.assets = s.assets.filter((x) => x.id !== a.id);
+        st.happiness = clamp(st.happiness - 8);
+        addFeed(s, `Your ${a.name.replace('Rescue ', '').toLowerCase()} passed away after a long, loved life.`, 'event', 'family');
+      }
+    }
+  }
+  // loans: interest then the fixed yearly payment
+  for (const l of [...s.loans]) {
+    l.balance = Math.round(l.balance * (1 + l.rate));
+    const pay = Math.min(l.yearly, l.balance);
+    ch.money -= pay;
+    l.balance -= pay;
+    if (l.balance <= 0) {
+      s.loans = s.loans.filter((x) => x.id !== l.id);
+      const a = s.assets.find((x) => x.loanId === l.id);
+      if (a) a.loanId = undefined;
+      addFeed(s, `You made the final payment on ${l.label}. It is yours, free and clear.`, 'milestone', 'money');
+    }
+  }
+  ch.flags.owns_home = s.assets.some((a) => a.kind === 'home');
+
   // expenses & family support
   const parentAlive = livingRels(s, 'parent').length > 0;
   if (ch.age >= 18) {
     const kids = livingRels(s, 'child').filter((c) => c.age < 18).length;
     const inflation = Math.pow(1.018, Math.max(0, ch.age - 18));
-    let cost = (ch.flags.owns_home ? 19000 : 23000) * inflation;
-    if (ch.age < 22 && parentAlive && !ch.flags.moved_out) cost = 4000;
+    let cost = (ch.flags.owns_home ? 15000 : 23000) * inflation;
+    if (ch.age < 30 && parentAlive && !ch.flags.moved_out) cost = 4000;
+    if (ch.flags.cohabit && livingRels(s, 'partner').length > 0) cost *= 0.75;
     cost += kids * 6000;
     if (ch.retired) cost *= 0.7;
     ch.money -= Math.round(cost);
@@ -242,7 +345,23 @@ function passiveYear(s: GameState): void {
   if (ch.money < 0) ch.money = Math.round(ch.money * 1.06);
   if (ch.money < -40000) st.happiness = clamp(st.happiness - 3);
   else if (ch.money < 0 && ch.age >= 18) st.happiness = clamp(st.happiness - 1);
-  if (ch.money > ch.peakMoney) ch.peakMoney = ch.money;
+  if (ch.money < -120000) bankrupt(s);
+  const nw = netWorth(s);
+  if (nw > ch.peakMoney) ch.peakMoney = nw;
+  void loansBalance;
+}
+
+function bankrupt(s: GameState): void {
+  const ch = s.character;
+  addFeed(s, 'The debts finally win. You file for bankruptcy: the bank takes your assets and the slate is wiped, but the stain on your name lingers.', 'event', 'money');
+  s.assets = [];
+  s.loans = [];
+  ch.money = 0;
+  ch.flags.owns_home = false;
+  ch.flags.bankrupt = true;
+  ch.stats.reputation = clamp(ch.stats.reputation - 14);
+  ch.stats.happiness = clamp(ch.stats.happiness - 14);
+  applyEffects(s, [{ t: 'mem', text: 'Went bankrupt and started over from nothing.', tags: ['shame', 'money'], weight: 2 }]);
 }
 
 function naturalDeath(s: GameState): string | null {
@@ -256,7 +375,7 @@ function naturalDeath(s: GameState): string | null {
 
 // ---------- death & legacy ----------
 
-function kill(s: GameState, cause: string): void {
+export function kill(s: GameState, cause: string): void {
   const ch = s.character;
   ch.alive = false;
   ch.causeOfDeath = cause;
@@ -279,6 +398,7 @@ function kill(s: GameState, cause: string): void {
     ageAtDeath: ch.age,
     cause,
     peakMoney: ch.peakMoney,
+    netWorth: netWorth(s),
     finalJob: ch.job?.title ?? ch.lastJob ?? 'No career',
     education: ch.education,
     reputation: ch.stats.reputation,
@@ -302,8 +422,14 @@ export function continueAs(prev: GameState, childId: string): GameState {
   const heir = heirs.find((h) => h.id === childId);
   if (!heir) return prev;
 
-  // Heirs inherit 60% of any estate, split between them. Debts die with you: nobody starts life underwater.
-  const share = old.money > 0 ? Math.floor((old.money * 0.6) / heirs.length) : 0;
+  // The chosen heir inherits the best home and any heirlooms that keep their value (art, watches, classic cars).
+  // Everything else is sold, loans are settled, and 60% of what is left is split between the children. Debts die with you.
+  const homes = s.assets.filter((a) => a.kind === 'home').sort((a, b) => b.value - a.value);
+  const familyHome = homes[0];
+  const kept = s.assets.filter((a) => a === familyHome || (a.kind !== 'home' && a.kind !== 'pet' && a.rate > 0));
+  const sold = s.assets.filter((a) => !kept.includes(a));
+  const cashEstate = Math.max(0, old.money + sold.reduce((a, x) => a + x.value, 0) - s.loans.reduce((a, x) => a + x.balance, 0));
+  const share = Math.floor((cashEstate * 0.6) / heirs.length);
   const firstName = heir.name.split(' ')[0];
   const siblings = heirs.filter((h) => h.id !== heir.id);
   const survivingParent = s.relationships.find((r) => r.kind === 'partner' && r.alive);
@@ -336,11 +462,21 @@ export function continueAs(prev: GameState, childId: string): GameState {
     money: share,
     peakMoney: Math.max(0, share),
     education: heir.age >= 18 ? 'highschool' : 'none',
+    skills: {
+      athletics: clamp(old.skills.athletics * 0.4 + int(s, 8, 24)),
+      creativity: clamp(old.skills.creativity * 0.4 + int(s, 8, 24)),
+      tech: clamp(old.skills.tech * 0.4 + int(s, 5, 20)),
+      charisma: clamp(old.skills.charisma * 0.4 + int(s, 8, 24)),
+    },
     job: null,
     retired: false,
     flags: legacyFlags,
     alive: true,
   };
+  if (familyHome) s.character.flags.owns_home = true;
+  s.assets = kept.map((a) => ({ ...a, id: uid(s, 'a'), loanId: undefined }));
+  s.loans = [];
+  s.actionLog = {};
   s.relationships = newRels;
   if (heir.age >= 6) {
     const f = makeRel(s, 'friend', heir.age + int(s, -1, 1), int(s, 40, 70));
@@ -360,12 +496,14 @@ export function continueAs(prev: GameState, childId: string): GameState {
   s.eventHistory = {};
   s.queue = [];
   s.phase = 'alive';
-  s.actionsLeft = 3;
+  s.actionsLeft = SLOTS_PER_YEAR;
   s.family.generation += 1;
   addFeed(
     s,
     `Generation ${s.family.generation}: you are now ${firstName} ${s.family.surname}, age ${heir.age}. ${
       share > 0 ? `You inherit $${share.toLocaleString('en-US')}.` : 'You inherit little but the name.'
+    }${familyHome ? ` The family home, ${familyHome.name}, is yours now.` : ''}${
+      kept.length > (familyHome ? 1 : 0) ? ' So are a few heirlooms worth keeping.' : ''
     }`,
     'milestone',
   );
@@ -423,7 +561,7 @@ function trigger(s: GameState, c: Candidate): void {
   const ctx = { targetId: c.targetId, died: undefined as string | undefined };
   applyEffects(s, c.ev.effects ?? [], ctx);
   const target = s.relationships.find((r) => r.id === ctx.targetId);
-  addFeed(s, fill(s, c.ev.text, target), c.ev.milestone ? 'milestone' : 'event');
+  addFeed(s, fill(s, c.ev.text, target), c.ev.milestone ? 'milestone' : 'event', c.ev.category);
   if (ctx.died) kill(s, ctx.died);
 }
 
@@ -469,12 +607,33 @@ export interface ChoiceView {
   reason?: string;
 }
 
+export const RESULT_EVENT = '__result';
+
+/** Queue a result popup. `before` is a snapshot from snapshotFor() so the popup can show what changed. */
+export function presentResult(
+  s: GameState,
+  o: { title: string; cat: EventDef['category']; text: string; before: ReturnType<typeof snapshot>; targetId?: string },
+): void {
+  const target = s.relationships.find((r) => r.id === o.targetId);
+  s.queue.push({
+    eventId: RESULT_EVENT, title: o.title, cat: o.cat, stage: 'result', resultText: o.text, targetId: o.targetId,
+    deltas: diff(o.before, snapshot(s, o.targetId), target?.name),
+  });
+}
+export const snapshotFor = (s: GameState, targetId?: string) => snapshot(s, targetId);
+
 export function currentEvent(s: GameState): { pending: PendingEvent; ev: EventDef; target?: Relationship } | null {
   const pending = s.queue[0];
   if (!pending) return null;
+  const target = s.relationships.find((r) => r.id === pending.targetId);
+  if (pending.eventId === RESULT_EVENT) {
+    // a result-only popup (an action you took, a purchase...) has no event definition behind it
+    const ev: EventDef = { id: RESULT_EVENT, pack: 'core', category: pending.cat ?? 'life', title: pending.title ?? 'Result', text: '', minAge: 0, maxAge: 200, weight: 0 };
+    return { pending, ev, target };
+  }
   const ev = getEvent(pending.eventId);
   if (!ev) return null;
-  return { pending, ev, target: s.relationships.find((r) => r.id === pending.targetId) };
+  return { pending, ev, target };
 }
 
 export function choiceViews(s: GameState, ev: EventDef): ChoiceView[] {
@@ -518,7 +677,7 @@ export function resolveChoice(prev: GameState, index: number): GameState {
   pending.targetId = ctx.targetId;
   pending.deltas = diff(before, snapshot(s, ctx.targetId), target?.name);
 
-  addFeed(s, `${fill(s, ev.title, target)}: ${choice.label}. ${text}`, 'choice');
+  addFeed(s, `${fill(s, ev.title, target)}: ${choice.label}. ${text}`, 'choice', ev.category);
   if (ctx.died) kill(s, ctx.died);
   return s;
 }
@@ -532,13 +691,17 @@ export function dismissResult(prev: GameState): GameState {
 
 function snapshot(s: GameState, targetId?: string) {
   const t = s.relationships.find((r) => r.id === targetId);
-  return { stats: { ...s.character.stats }, money: s.character.money, rel: t ? t.closeness : undefined };
+  return { stats: { ...s.character.stats }, skills: { ...s.character.skills }, money: s.character.money, rel: t ? t.closeness : undefined };
 }
 
 function diff(a: ReturnType<typeof snapshot>, b: ReturnType<typeof snapshot>, targetName?: string) {
   const out: { label: string; amount: number }[] = [];
   (Object.keys(a.stats) as (keyof typeof a.stats)[]).forEach((k) => {
     const d = b.stats[k] - a.stats[k];
+    if (d !== 0) out.push({ label: k[0].toUpperCase() + k.slice(1), amount: d });
+  });
+  (Object.keys(a.skills) as (keyof typeof a.skills)[]).forEach((k) => {
+    const d = b.skills[k] - a.skills[k];
     if (d !== 0) out.push({ label: k[0].toUpperCase() + k.slice(1), amount: d });
   });
   if (b.money !== a.money) out.push({ label: 'Money', amount: b.money - a.money });

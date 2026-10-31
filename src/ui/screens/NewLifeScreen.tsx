@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, Card, Chip, SectionTitle } from '../components.tsx';
 import { colors, serif } from '../theme.ts';
+import { Portrait } from '../art.tsx';
 import { BACKGROUNDS } from '../../engine/lifecycle.ts';
 import type { BackgroundId } from '../../engine/types.ts';
 import { FIRST_NAMES, LAST_NAMES } from '../../engine/names.ts';
@@ -24,7 +25,11 @@ export function NewLifeScreen({ onBack }: { onBack: () => void }) {
       <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 60, paddingBottom: 40 }}>
         <Text onPress={onBack} style={{ color: colors.muted, marginBottom: 12 }}>‹ Back</Text>
         <Text style={{ color: colors.text, fontFamily: serif, fontSize: 30, marginBottom: 4 }}>A new bloodline</Text>
-        <Text style={{ color: colors.muted, marginBottom: 18 }}>Choose who starts the story. Your descendants carry it on.</Text>
+        <Text style={{ color: colors.muted, marginBottom: 14 }}>Choose who starts the story. Your descendants carry it on.</Text>
+        <View style={{ alignItems: 'center', marginBottom: 16 }}>
+          <Portrait name={`${first} ${last}`} age={startAge === 0 ? 1 : 16} gender={gender} size={104} ring={colors.gold} />
+          <Text style={{ color: colors.muted, fontSize: 11, marginTop: 6 }}>Your face changes with your name. Try a few.</Text>
+        </View>
 
         <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 6 }}>FIRST NAME</Text>
         <TextInput value={first} onChangeText={setFirst} style={input} placeholder="First name" />

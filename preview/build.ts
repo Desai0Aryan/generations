@@ -19,6 +19,7 @@ const result = await Bun.build({
         build.onResolve({ filter: /^react-native$/ }, () => ({ path: shim('react-native.tsx') }));
         build.onResolve({ filter: /^react-native-safe-area-context$/ }, () => ({ path: shim('safe-area.tsx') }));
         build.onResolve({ filter: /^@react-native-async-storage\/async-storage$/ }, () => ({ path: shim('async-storage.ts') }));
+        build.onResolve({ filter: /^expo-haptics$/ }, () => ({ path: shim('haptics.ts') }));
         build.onResolve({ filter: /^expo-status-bar$/ }, () => ({ path: shim('status-bar.tsx') }));
         build.onResolve({ filter: /^react(-dom)?(\/.*)?$/ }, (a) => ({ path: Bun.resolveSync(a.path, NM) }));
       },

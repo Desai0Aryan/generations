@@ -19,6 +19,9 @@ export function rn(style: Style): React.CSSProperties {
       case 'paddingVertical': o.paddingTop = v; o.paddingBottom = v; break;
       case 'marginHorizontal': o.marginLeft = v; o.marginRight = v; break;
       case 'marginVertical': o.marginTop = v; o.marginBottom = v; break;
+      case 'transform':
+        if (Array.isArray(v)) o.transform = v.map((x: any) => Object.entries(x).map(([n, val]) => `${n}(${typeof val === 'number' && !/scale|rotate/.test(n) ? val + 'px' : val})`).join(' ')).join(' ');
+        break;
       case 'lineHeight': o.lineHeight = typeof v === 'number' ? `${v}px` : v; break;
       case 'textAlignVertical': case 'includeFontPadding': case 'elevation': case 'resizeMode':
       case 'shadowColor': case 'shadowOffset': case 'shadowOpacity': case 'shadowRadius': break;

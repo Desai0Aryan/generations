@@ -1,10 +1,12 @@
 import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { Button, Card, Pill, SectionTitle } from '../components.tsx';
-import { colors } from '../theme.ts';
+import { Gradient } from '../art.tsx';
+import { colors, serif } from '../theme.ts';
 import { useGame } from '../../store/GameContext.tsx';
 import { PRODUCTS, THEMES } from '../../monetization/products.ts';
 import { owns } from '../../monetization/entitlements.ts';
+import { PACKS } from '../../content/index.ts';
 
 export function ShopTab() {
   const { entitlements, buy, restorePurchases, setTheme, accent } = useGame();
@@ -19,16 +21,23 @@ export function ShopTab() {
       </Card>
 
       <SectionTitle>Story packs</SectionTitle>
-      {packs.map((p) => (
-        <Card key={p.id} style={{ marginBottom: 10 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', flex: 1 }}>{p.name}</Text>
-            {owns(entitlements, p) ? <Pill text="Owned" color={colors.good} /> : <Text style={{ color: accent, fontWeight: '800' }}>{p.priceLabel}</Text>}
+      {packs.map((p) => {
+        const pack = PACKS.find((x) => x.id === p.refId);
+        const have = owns(entitlements, p);
+        return (
+          <View key={p.id} style={{ marginBottom: 12, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
+            <Gradient stops={pack?.colors ?? ['#2D3A8C', '#8B7BF0']} style={{ height: 92, justifyContent: 'center', paddingHorizontal: 16 }}>
+              <Text style={{ position: 'absolute', right: 14, top: 12, fontSize: 52, opacity: 0.9 }}>{pack?.emoji ?? '📦'}</Text>
+              <Text style={{ color: '#FFFFFF', fontFamily: serif, fontSize: 24 }}>{p.name}</Text>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, marginTop: 2 }}>{p.blurb}</Text>
+            </Gradient>
+            <View style={{ padding: 14 }}>
+              <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 10 }}>{pack?.description} · {pack?.events.length} new story events</Text>
+              {have ? <Pill text="Owned" color={colors.good} /> : <Button label={`Unlock (test) · ${p.priceLabel}`} variant="gold" onPress={() => buy(p)} />}
+            </View>
           </View>
-          <Text style={{ color: colors.muted, marginTop: 4, marginBottom: 10 }}>{p.blurb}</Text>
-          {!owns(entitlements, p) ? <Button label="Unlock (test)" variant="gold" onPress={() => buy(p)} /> : <Text style={{ color: colors.muted, fontSize: 12 }}>New events appear in your life as you age. Applies to the current game too.</Text>}
-        </Card>
-      ))}
+        );
+      })}
 
       <SectionTitle>Family crest themes</SectionTitle>
       {THEMES.map((t) => {
@@ -54,6 +63,7 @@ export function ShopTab() {
       })}
 
       <Button label="Restore purchases" variant="ghost" onPress={restorePurchases} style={{ marginTop: 6 }} />
+      <View style={{ height: 2, backgroundColor: accent, opacity: 0.25, marginTop: 20 }} />
     </ScrollView>
   );
 }

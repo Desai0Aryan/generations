@@ -2,6 +2,7 @@
 import type { EventDef } from '../engine/types.ts';
 import { CORE_EVENTS } from './core.ts';
 import { ENTREPRENEUR_EVENTS } from './entrepreneur.ts';
+import { WANDERLUST_EVENTS } from './wanderlust.ts';
 
 export interface PackInfo {
   id: string;
@@ -12,6 +13,8 @@ export interface PackInfo {
   /** App Store product id (create the same id in App Store Connect). */
   productId?: string;
   priceLabel?: string;
+  emoji?: string;
+  colors?: [string, string];
   events: EventDef[];
 }
 
@@ -32,7 +35,21 @@ export const PACKS: PackInfo[] = [
     premium: true,
     productId: 'com.yourstudio.generations.pack.entrepreneur',
     priceLabel: '$2.99',
+    emoji: '🚀',
+    colors: ['#7A3FD1', '#F08BB5'],
     events: ENTREPRENEUR_EVENTS,
+  },
+  {
+    id: 'wanderlust',
+    name: 'Wanderlust',
+    tagline: 'See the world. Bring something home for the family.',
+    description: 'Passport stamps, language learning, living abroad and heirlooms your descendants inherit.',
+    premium: true,
+    productId: 'com.yourstudio.generations.pack.wanderlust',
+    priceLabel: '$2.99',
+    emoji: '🧭',
+    colors: ['#1E6F8C', '#E0B866'],
+    events: WANDERLUST_EVENTS,
   },
 ];
 

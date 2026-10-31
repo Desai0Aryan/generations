@@ -18,6 +18,12 @@ scripts/simulate.ts          balance testing
 preview/                     browser build (shims real React Native components for the web)
 ```
 
+## Part 2 additions
+- `engine/actions.ts`: player-chosen actions (`performAction`, job applications, buying/selling). `engine/finance.ts`: net worth, loans, credit limit.
+- `content/actions.ts`, `jobs.ts`, `education.ts`, `assets.ts`: all data. Add an action, career or car by adding an entry, no engine change.
+- `ui/sheets.tsx`: bottom sheets (action, person, job board). `ui/art.tsx`, `ui/fx.ts`: procedural art and animation/haptics.
+- Save version is 2; `store/storage.ts` migrates v1 saves.
+
 ## Why this scales
 - **Events are data.** A pack is an array of `EventDef`. Add 500 events without touching the engine. Later they can be downloaded
   from a server so you can ship new story content without an App Store update.

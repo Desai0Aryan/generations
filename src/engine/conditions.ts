@@ -1,6 +1,7 @@
 import type { Cmp, Condition, GameState, Relationship } from './types.ts';
 import { EDU_RANK } from './types.ts';
 import { chance } from './rng.ts';
+import { netWorth, totalDebt } from './finance.ts';
 
 function cmp(a: number, op: Cmp, b: number): boolean {
   switch (op) {
@@ -39,6 +40,13 @@ export function check(s: GameState, c: Condition, deterministic = false): boolea
     case 'gen': return cmp(s.family.generation, c.op, c.v);
     case 'age': return cmp(ch.age, c.op, c.v);
     case 'chance': return deterministic ? true : chance(s, c.p);
+    case 'skill': return cmp(ch.skills?.[c.k] ?? 0, c.op, c.v);
+    case 'asset': return s.assets.some((a) => a.kind === c.kind) === (c.has ?? true);
+    case 'school': return (ch.school !== undefined) === (c.has ?? true);
+    case 'field': return (ch.job?.field === c.is && !ch.retired) === (c.has ?? true);
+    case 'debt': return cmp(totalDebt(s), c.op, c.v);
+    case 'perf': return cmp(ch.job?.perf ?? 0, c.op, c.v);
+    case 'worth': return cmp(netWorth(s), c.op, c.v);
     case 'not': return !check(s, c.c, deterministic);
     case 'any': return c.cs.some((x) => check(s, x, deterministic));
   }

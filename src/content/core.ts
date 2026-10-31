@@ -2,8 +2,8 @@
 // To add content: copy any event, change the id/text/effects. No engine changes needed.
 import type { EventDef } from '../engine/types.ts';
 import {
-  addRel, anyOf, bond, cash, die, edu, eduAtLeast, employed, endRel, flag, generation, hasFlag, hasRel, job, mem, money,
-  noFlag, noRel, odds, opt, out, quit, raise, remembers, retire, rtag, stat, statIs, unemployed,
+  addRel, anyOf, bond, cash, die, edu, eduAtLeast, employed, endRel, enroll, flag, generation, hasFlag, hasRel, hire, job, mem, money,
+  noFlag, noRel, odds, opt, out, quit, raise, remembers, retire, rtag, skill, stat, statIs, unemployed,
 } from './dsl.ts';
 
 const P = 'core';
@@ -316,19 +316,53 @@ export const CORE_EVENTS: EventDef[] = [
     id: 'college_decision', pack: P, category: 'life', title: 'What next?', minAge: 18, maxAge: 18, weight: 1, milestone: true,
     text: 'Graduation is behind you. The real question lands: what comes next?',
     choices: [
-      opt('Go to college', 'About $9k a year. Debt is possible', [
-        out('You pack your life into boxes and head off to campus.', [flag('inCollege'), flag('moved_out'), stat('happiness', 4), mem('Left home for college.', ['school'], 2)]),
+      opt('Community college', '2 years · $4k/yr · associate degree', [
+        out('Evening classes, a part-time job and a plan. It is a smart start.', [enroll('community'), stat('happiness', 3), job('Part-time Retail Associate', 12000), stat('smarts', 1)]),
       ]),
-      opt('Learn a trade', 'Get certified and start working', [
-        out('You apprentice with a seasoned pro. The work is hands-on and steady.', [edu('trade'), job('Apprentice Electrician', 32000), flag('moved_out'), stat('smarts', 2), money(-3000)]),
+      opt('State university', '4 years · $10k/yr', [
+        out('You pack your life into boxes and head off to campus.', [enroll('state'), flag('moved_out'), stat('happiness', 4), mem('Left home for college.', ['school'], 2)]),
+      ], { requires: [statIs('smarts', '>=', 40)] }),
+      opt('Private college', '4 years · $22k/yr · smaller classes, better network', [
+        out('A leafy campus, tough professors and a new circle of ambitious friends.', [enroll('private'), flag('moved_out'), stat('happiness', 4), mem('Started at a private college.', ['school'], 2)]),
+      ], { requires: [statIs('smarts', '>=', 52)] }),
+      opt('Elite university', '4 years · $38k/yr · needs smarts 70+', [
+        out('The acceptance letter arrives. Your name is on the door of one of the hardest schools in the country.', [enroll('elite'), flag('moved_out'), stat('happiness', 9), stat('reputation', 4), mem('Got into an elite university.', ['school'], 3)], 1, { k: 'smarts', amt: 2 }),
+        out('Waitlisted, then rejected. You enroll at the state university instead and make it your own.', [enroll('state'), flag('moved_out'), stat('happiness', -1)], 1),
+      ], { requires: [statIs('smarts', '>=', 70)] }),
+      opt('Learn a trade', 'Apprentice and earn', [
+        out('You apprentice with a seasoned pro. The work is hands-on and steady.', [edu('trade'), hire('trades'), flag('moved_out'), stat('smarts', 2), money(-3000)]),
       ]),
       opt('Start working right away', 'Earn now', [
-        out('You land a job and start building your own life.', [job('Retail Associate', 26000), flag('moved_out'), stat('happiness', 2)]),
-        out('Work is steady, if not thrilling. You start saving.', [job('Warehouse Associate', 29000), flag('moved_out')]),
+        out('You land a job and start building your own life.', [hire('retail'), flag('moved_out'), stat('happiness', 2)], 3),
+        out('A friend\'s uncle needs an assistant in his office. It is a start.', [hire('office'), flag('moved_out'), stat('happiness', 2)], 1, { k: 'smarts', amt: 1 }),
       ]),
       opt('Take a gap year', 'Travel, find yourself', [
         out('You travel on a shoestring. The world is bigger than you thought.', [stat('happiness', 10), stat('smarts', 2), money(-3000), mem('A gap year that changed how I see the world.', ['travel'], 2)]),
       ]),
+    ],
+  },
+  {
+    id: 'school_choice', pack: P, category: 'school', title: 'Which school?', minAge: 11, maxAge: 11, weight: 1, milestone: true,
+    text: 'Middle school is coming. Your parents sit you down: this time they want to hear what you think.',
+    choices: [
+      opt('Stay at the local public school', 'Friends nearby', [out('Familiar halls, familiar faces. You settle in fast.', [stat('happiness', 3), bond(4, 'friend')])]),
+      opt('Apply to the gifted program', 'Smarts 55+', [
+        out('You get in. The work is harder, and so is the competition.', [stat('smarts', 5), stat('happiness', -1), stat('reputation', 1)], 2, { k: 'smarts', amt: 1 }),
+        out('Not quite. You will make your mark at your regular school.', [stat('happiness', -2)], 1),
+      ], { requires: [statIs('smarts', '>=', 55)] }),
+      opt('Private school', 'Family stretches the budget', [out('Uniforms, small classes and a very polished set of classmates.', [stat('smarts', 3), stat('reputation', 3), stat('happiness', -1), addRel('friend', { closeness: 50 })])]),
+      opt('Homeschool', 'Learn at your own pace', [out('Your kitchen table becomes a classroom. You learn faster, but see fewer people.', [stat('smarts', 4), stat('happiness', 1), bond(-6, 'friend')])]),
+    ],
+  },
+  {
+    id: 'hs_track', pack: P, category: 'school', title: 'Choose your track', minAge: 14, maxAge: 14, weight: 1, milestone: true,
+    text: 'High school is a buffet. You cannot take everything, so what are you going to focus on?',
+    choices: [
+      opt('Academics: honors classes', 'Smarts and college options', [out('Weekends vanish into study groups. Your transcript looks great.', [stat('smarts', 7), stat('happiness', -2), stat('reputation', 2), flag('honors')])]),
+      opt('Athletics', 'Teams and fitness', [out('Two-a-days, team dinners, and a locker full of gear.', [skill('athletics', 10), stat('health', 4), flag('on_team'), addRel('friend', { closeness: 60 })])]),
+      opt('Arts & music', 'Creativity', [out('The art room becomes your second home.', [skill('creativity', 12), stat('happiness', 5)])]),
+      opt('Tech & robotics', 'Build things', [out('Soldering irons and code at midnight.', [skill('tech', 12), stat('smarts', 3), addRel('friend', { closeness: 55 })])]),
+      opt('Student government & social life', 'People skills', [out('You learn how to run a meeting and a room.', [skill('charisma', 10), stat('reputation', 5), addRel('friend', { closeness: 55 })])]),
     ],
   },
   {
@@ -346,12 +380,6 @@ export const CORE_EVENTS: EventDef[] = [
       ]),
     ],
   },
-  {
-    id: 'college_graduation', pack: P, category: 'school', title: 'Degree in hand', minAge: 22, maxAge: 22, weight: 1, milestone: true,
-    conditions: [hasFlag('inCollege')],
-    text: "You graduate with a bachelor's degree. It was hard. You did it.",
-    effects: [edu('college'), flag('inCollege', false), stat('happiness', 8), stat('smarts', 2), mem("Earned my bachelor's degree.", ['school'], 2)],
-  },
 
   // ───────────── work & money ─────────────
   {
@@ -360,11 +388,11 @@ export const CORE_EVENTS: EventDef[] = [
     text: "You got an interview at a tech company you've always admired. It's a big step, but it means moving to a new city.",
     choices: [
       opt('Go for it', 'Big risk, big reward', [
-        out('You nail it. They offer you a role, and a new city to call home.', [job('Junior Developer', 62000), flag('moved_out'), stat('happiness', 8), stat('reputation', 3), mem('Took the leap and moved for my dream job.', ['career'], 3)], 1, { k: 'smarts', amt: 1.5 }),
+        out('You nail it. They offer you a role, and a new city to call home.', [hire('tech'), flag('moved_out'), stat('happiness', 8), stat('reputation', 3), mem('Took the leap and moved for my dream job.', ['career'], 3)], 1, { k: 'smarts', amt: 1.5 }),
         out('They pass, but say you were close. You keep the nerve you found.', [stat('happiness', -3), stat('smarts', 1), mem('Almost got my dream job. The nerve stayed.', ['career'])], 1),
       ]),
       opt('Play it safe', 'Stay where you are', [
-        out('You take a steady office job near home. Stability has its own comforts.', [job('Office Coordinator', 38000), stat('happiness', 2)]),
+        out('You take a steady office job near home. Stability has its own comforts.', [hire('office'), stat('happiness', 2)]),
       ]),
     ],
   },
@@ -374,13 +402,13 @@ export const CORE_EVENTS: EventDef[] = [
     text: 'Bills do not pay themselves. It is time to find work.',
     choices: [
       opt('Apply everywhere', 'Take what comes', [
-        out('An office job comes through. It pays the bills.', [job('Office Assistant', 36000), stat('happiness', 2)], 3, { k: 'smarts', amt: 1 }),
-        out('A sales role opens up. High pressure, decent pay.', [job('Sales Associate', 34000)], 2),
-        out('You land something in customer support.', [job('Support Specialist', 33000)], 2),
+        out('An office job comes through. It pays the bills.', [hire('office'), stat('happiness', 2)], 3, { k: 'smarts', amt: 1 }),
+        out('A sales role opens up. High pressure, decent pay.', [hire('retail')], 2),
+        out('You land something in customer support.', [hire('office')], 2),
         out('Weeks of rejection. It wears on you.', [stat('happiness', -4)], 1),
       ]),
       opt('Hold out for something great', 'Gamble with savings', [
-        out('Patience pays off with a strong offer.', [job('Project Coordinator', 52000), stat('happiness', 5), stat('reputation', 2)], 1, { k: 'smarts', amt: 1.5 }),
+        out('Patience pays off with a strong offer.', [hire('office'), stat('happiness', 5), stat('reputation', 2)], 1, { k: 'smarts', amt: 1.5 }),
         out('Months pass without luck. Savings dwindle.', [money(-6000), stat('happiness', -5)], 2),
       ]),
       opt('Pick up gig work', 'Flexible money', [

@@ -1,30 +1,42 @@
-// Run:  npx tsx scripts/simulate.ts   (or: node --experimental-strip-types scripts/simulate.ts)
-// Plays many lives with random choices and prints sanity statistics.
-import { newGame, autoplayTo, getHeirs, continueAs } from '../src/engine/lifecycle.ts';
-import { EVENTS_FOR_TEST } from './util.ts';
+// Run:  npx tsx scripts/simulate.ts [lives]
+// Plays many lives with a "player" who randomly tries actions, jobs, purchases and people, then prints sanity stats.
+import { newGame, getHeirs, continueAs } from '../src/engine/lifecycle.ts';
+import { autoPlayer } from '../src/engine/actions.ts';
+import { netWorth } from '../src/engine/finance.ts';
+import { PACKS } from '../src/content/index.ts';
+import { ACTIONS } from '../src/content/actions.ts';
 
-const N = Number(process.argv[2] ?? 2000);
+const N = Number(process.argv[2] ?? 500);
+const activity = Number(process.argv[3] ?? 0.7);
 const ages: number[] = [];
 const causes: Record<string, number> = {};
 const fired: Record<string, number> = {};
+const acted: Record<string, number> = {};
 let generations = 0;
 let errors = 0;
-const money: number[] = [];
+const worth: number[] = [];
+const jobs: Record<string, number> = {};
+let assertFails = 0;
 
 for (let i = 0; i < N; i++) {
   try {
     let s = newGame({
       firstName: 'Test', lastName: 'Sim', gender: 'x', background: (['working', 'middle', 'comfortable', 'wealthy'] as const)[i % 4],
-      startAge: 0, seed: 1000 + i, packs: ['entrepreneur'], startYear: 2026,
+      startAge: 0, seed: 1000 + i, packs: ['entrepreneur', 'wanderlust'], startYear: 2026,
     });
     for (let g = 0; g < 4; g++) {
-      s = autoplayTo(s, 130, { social: true });
+      s = autoPlayer(s, 130, { activity });
       if (s.phase !== 'dead') throw new Error('did not die by 130');
       ages.push(s.character.age);
-      money.push(s.character.peakMoney);
-      const c = s.character.causeOfDeath ?? '?';
-      causes[c] = (causes[c] ?? 0) + 1;
+      worth.push(netWorth(s));
+      causes[s.character.causeOfDeath ?? '?'] = (causes[s.character.causeOfDeath ?? '?'] ?? 0) + 1;
+      if (s.character.lastJob) jobs[s.character.lastJob] = (jobs[s.character.lastJob] ?? 0) + 1;
       for (const id of Object.keys(s.eventHistory)) fired[id] = (fired[id] ?? 0) + 1;
+      for (const k of Object.keys(s.actionLog)) { const id = k.split('@')[0]; acted[id] = (acted[id] ?? 0) + 1; }
+      // invariants
+      for (const st of Object.values(s.character.stats)) if (st < 0 || st > 100 || Number.isNaN(st)) assertFails++;
+      if (Number.isNaN(s.character.money)) assertFails++;
+      for (const a of s.assets) if (Number.isNaN(a.value)) assertFails++;
       const heirs = getHeirs(s);
       if (!heirs.length) break;
       generations++;
@@ -36,14 +48,12 @@ for (let i = 0; i < N; i++) {
   }
 }
 ages.sort((a, b) => a - b);
-const med = ages[Math.floor(ages.length / 2)];
-const mean = ages.reduce((a, b) => a + b, 0) / ages.length;
-money.sort((a, b) => a - b);
-console.log(`lives simulated: ${ages.length}, errors: ${errors}, heirs continued: ${generations}`);
-console.log(`age at death  mean ${mean.toFixed(1)}  median ${med}  p10 ${ages[Math.floor(ages.length * 0.1)]}  p90 ${ages[Math.floor(ages.length * 0.9)]}  <20: ${ages.filter((a) => a < 20).length}`);
-console.log(`peak money    median $${money[Math.floor(money.length / 2)]}  p90 $${money[Math.floor(money.length * 0.9)]}`);
-console.log('causes', causes);
-const never = EVENTS_FOR_TEST.filter((id) => !fired[id]);
-console.log('events never fired:', never.length ? never.join(', ') : 'none');
-const top = Object.entries(fired).sort((a, b) => b[1] - a[1]).slice(0, 5);
-console.log('most common:', top.map(([k, v]) => `${k}:${v}`).join(', '));
+worth.sort((a, b) => a - b);
+const q = (arr: number[], p: number) => arr[Math.min(arr.length - 1, Math.floor(arr.length * p))];
+console.log(`lives: ${ages.length}  errors: ${errors}  invariant failures: ${assertFails}  heirs continued: ${generations}`);
+console.log(`age at death   p10 ${q(ages, 0.1)}  median ${q(ages, 0.5)}  p90 ${q(ages, 0.9)}   under 20: ${ages.filter((a) => a < 20).length}`);
+console.log(`net worth      p10 $${q(worth, 0.1)}  median $${q(worth, 0.5)}  p90 $${q(worth, 0.9)}`);
+const allEvents = PACKS.flatMap((p) => p.events.map((e) => e.id));
+console.log('events never fired:', allEvents.filter((id) => !fired[id]).join(', ') || 'none');
+console.log('actions never used:', ACTIONS.filter((a) => !acted[a.id]).map((a) => a.id).join(', ') || 'none');
+console.log('top careers:', Object.entries(jobs).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(', '));

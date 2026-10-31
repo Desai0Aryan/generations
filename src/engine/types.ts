@@ -14,16 +14,25 @@ export const STAT_LABELS: Record<StatKey, string> = {
 
 export type Stats = Record<StatKey, number>;
 
-export type Education = 'none' | 'highschool' | 'trade' | 'college';
-export const EDU_RANK: Record<Education, number> = { none: 0, highschool: 1, trade: 2, college: 3 };
+export type Education = 'none' | 'highschool' | 'trade' | 'college' | 'grad';
+export const EDU_RANK: Record<Education, number> = { none: 0, highschool: 1, trade: 2, college: 3, grad: 4 };
 export const EDU_LABELS: Record<Education, string> = {
   none: 'No diploma yet',
   highschool: 'High school diploma',
-  trade: 'Trade certification',
+  trade: 'Associate / trade certification',
   college: "Bachelor's degree",
+  grad: 'Graduate degree',
 };
 
+export type SkillKey = 'athletics' | 'creativity' | 'tech' | 'charisma';
+export const SKILL_KEYS: SkillKey[] = ['athletics', 'creativity', 'tech', 'charisma'];
+export const SKILL_LABELS: Record<SkillKey, string> = { athletics: 'Athletics', creativity: 'Creativity', tech: 'Tech', charisma: 'Charisma' };
+export type Skills = Record<SkillKey, number>;
+
+export type SchoolTier = 'community' | 'state' | 'private' | 'elite';
+
 export type RelKind =
+  | 'fling'
   | 'parent'
   | 'sibling'
   | 'friend'
@@ -47,6 +56,13 @@ export type Condition =
   | { t: 'gen'; op: Cmp; v: number }
   | { t: 'age'; op: Cmp; v: number }
   | { t: 'chance'; p: number }
+  | { t: 'skill'; k: SkillKey; op: Cmp; v: number }
+  | { t: 'asset'; kind: AssetKind; has?: boolean }
+  | { t: 'school'; has?: boolean }
+  | { t: 'field'; is: string; has?: boolean }
+  | { t: 'debt'; op: Cmp; v: number }
+  | { t: 'perf'; op: Cmp; v: number }
+  | { t: 'worth'; op: Cmp; v: number }
   | { t: 'not'; c: Condition }
   | { t: 'any'; cs: Condition[] };
 
@@ -59,7 +75,17 @@ export type Effect =
   | { t: 'rtag'; tag: string }
   | { t: 'addRel'; kind: RelKind; name?: string; closeness?: number; age?: number; bind?: boolean }
   | { t: 'endRel' }
-  | { t: 'job'; title: string; salary: number }
+  | { t: 'job'; title: string; salary: number; field?: string }
+  | { t: 'skill'; k: SkillKey; d: number }
+  | { t: 'enroll'; tier: SchoolTier; kind?: 'college' | 'grad'; degree?: string; length?: number; tuition?: number }
+  | { t: 'major'; name: string }
+  | { t: 'gpa'; d: number }
+  | { t: 'dropout' }
+  | { t: 'hire'; field: string }
+  | { t: 'perf'; d: number }
+  | { t: 'loan'; label: string; amount: number; rate: number; years: number }
+  | { t: 'payDebt'; amount: number }
+  | { t: 'relkind'; kind: RelKind }
   | { t: 'raise'; pct: number }
   | { t: 'quit' }
   | { t: 'retire' }
@@ -142,6 +168,45 @@ export interface Job {
   title: string;
   salary: number;
   years: number;
+  field?: string;
+  level?: number;
+  lvlYears?: number;
+  perf?: number; // 0-100, how well you are doing
+}
+
+export interface School {
+  tier: SchoolTier;
+  kind: 'college' | 'grad';
+  years: number;
+  length: number;
+  tuition: number;
+  gpa: number;
+  degree?: string;
+}
+
+export type AssetKind = 'car' | 'home' | 'luxury' | 'pet';
+
+export interface Asset {
+  id: string;
+  itemId: string;
+  kind: AssetKind;
+  name: string;
+  emoji: string;
+  value: number;
+  price: number;
+  boughtYear: number;
+  upkeep: number;
+  rate: number; // yearly value change (negative = depreciation)
+  loanId?: string;
+}
+
+export interface Loan {
+  id: string;
+  label: string;
+  balance: number;
+  rate: number;
+  yearly: number;
+  assetId?: string;
 }
 
 export interface Character {
@@ -156,6 +221,9 @@ export interface Character {
   money: number;
   peakMoney: number;
   education: Education;
+  skills: Skills;
+  major?: string;
+  school?: School;
   job: Job | null;
   lastJob?: string;
   retired: boolean;
@@ -172,11 +240,14 @@ export interface FeedEntry {
   year: number;
   text: string;
   kind: 'event' | 'system' | 'milestone' | 'death' | 'choice';
+  cat?: EventCategory;
 }
 
 export interface PendingEvent {
   eventId: string;
   targetId?: string;
+  title?: string;
+  cat?: EventCategory;
   stage: 'choose' | 'result';
   choiceIndex?: number;
   resultText?: string;
@@ -196,6 +267,7 @@ export interface LifeSummary {
   reputation: number;
   childrenCount: number;
   legacyScore: number;
+  netWorth?: number;
   highlights: string[];
 }
 
@@ -222,7 +294,10 @@ export interface GameState {
   eventHistory: Record<string, { count: number; lastYear: number }>;
   family: Family;
   packs: string[]; // enabled content pack ids
-  actionsLeft: number; // interactions with people this year
+  actionsLeft: number; // free-time slots this year (activities + time with people)
+  assets: Asset[];
+  loans: Loan[];
+  actionLog: Record<string, number>; // actionId(+target) -> last year it was done
   nextId: number;
 }
 
@@ -237,4 +312,25 @@ export interface NewGameOptions {
   startYear?: number;
 }
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+export const SLOTS_PER_YEAR = 5;
+
+// ───────── Player actions (the 'Do' tab) ─────────
+export type ActionGroup = 'love' | 'social' | 'school' | 'career' | 'sports' | 'money' | 'health' | 'family' | 'life';
+
+export interface ActionDef {
+  id: string;
+  group: ActionGroup;
+  icon: string;
+  label: string;
+  hint: string;
+  minAge: number;
+  maxAge: number;
+  time: number; // free-time slots used (0 = free)
+  repeat: 'year' | 'once' | 'any';
+  requires?: Condition[];
+  target?: TargetFilter; // present => shown when you tap a person
+  pack?: string;
+  /** one choice => performs immediately; several => the player picks */
+  choices: ChoiceDef[];
+}
