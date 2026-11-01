@@ -2,7 +2,7 @@
 // Content packs live in src/content/index.ts; this file lists cosmetics and the catalog shape the shop reads.
 import { PACKS } from '../content/index.ts';
 
-export type ProductKind = 'pack' | 'theme';
+export type ProductKind = 'pack' | 'theme' | 'cosmetic';
 
 export interface Product {
   id: string; // App Store product id
@@ -32,6 +32,8 @@ export const PRODUCTS: Product[] = [
       priceLabel: p.priceLabel ?? '$2.99',
     }),
   ),
+  { id: 'com.yourstudio.generations.cosmetic.couture', kind: 'cosmetic', refId: 'couture', name: 'Couture Collection', blurb: 'Gowns, a fur coat, a crown and a royal backdrop.', priceLabel: '$1.99' },
+  { id: 'com.yourstudio.generations.cosmetic.street', kind: 'cosmetic', refId: 'street', name: 'Streetwear Collection', blurb: 'Designer streetwear, a velour tracksuit and a neon backdrop.', priceLabel: '$1.99' },
   {
     id: 'com.yourstudio.generations.theme.gold',
     kind: 'theme',

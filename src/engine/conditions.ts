@@ -47,6 +47,20 @@ export function check(s: GameState, c: Condition, deterministic = false): boolea
     case 'debt': return cmp(totalDebt(s), c.op, c.v);
     case 'perf': return cmp(ch.job?.perf ?? 0, c.op, c.v);
     case 'worth': return cmp(netWorth(s), c.op, c.v);
+    case 'legal': {
+      const L = s.legal;
+      switch (c.is) {
+        case 'prison': return !!L.prison;
+        case 'free': return !L.prison;
+        case 'probation': return (L.probation ?? 0) > 0;
+        case 'record': return L.record.length > 0;
+        case 'felon': return L.record.some((r) => r.sev >= 4);
+        case 'fugitive': return !!L.fugitive;
+        case 'case': return !!L.case;
+      }
+      return false;
+    }
+    case 'sport': return (ch.sports ?? []).some((x) => x.level >= c.level);
     case 'not': return !check(s, c.c, deterministic);
     case 'any': return c.cs.some((x) => check(s, x, deterministic));
   }

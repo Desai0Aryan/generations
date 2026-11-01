@@ -1,6 +1,10 @@
 import React from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Card, SectionTitle, StatBar } from '../components.tsx';
+import { Button, Card, Pill, SectionTitle, StatBar } from '../components.tsx';
+import { Portrait } from '../art.tsx';
+import { useSheets } from '../sheets.tsx';
+import { SPORT_BY_ID, levelName } from '../../content/sports.ts';
+import { styleScore } from '../../content/wardrobe.ts';
 import { colors, fmtMoney, statColors } from '../theme.ts';
 import { useGame } from '../../store/GameContext.tsx';
 import { EDU_LABELS, SKILL_KEYS, SKILL_LABELS, STAT_KEYS, STAT_LABELS } from '../../engine/types.ts';
@@ -13,7 +17,9 @@ const SKILL_COLOR = { athletics: '#F0A35E', creativity: '#E86FD0', tech: '#5ED1E
 
 export function YouTab() {
   const { game } = useGame();
+  const { open: openSheet } = useSheets();
   if (!game) return null;
+  const L = game.legal;
   const ch = game.character;
   const goals = GOALS.filter((g) => g.minAge <= ch.age + 3).map((g) => ({ g, done: checkAll(game, g.done, true) }));
   const open = goals.filter((x) => !x.done).slice(0, 4);
@@ -22,9 +28,54 @@ export function YouTab() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 30 }}>
+      <Card style={{ marginBottom: 14, flexDirection: 'row', alignItems: 'center' }}>
+        <Portrait name={`${ch.firstName} ${ch.lastName}`} age={ch.age} gender={ch.gender} size={84} ring={colors.gold} />
+        <View style={{ flex: 1, marginLeft: 14 }}>
+          <Text style={{ color: colors.text, fontWeight: '800', fontSize: 17 }}>{ch.firstName} {ch.lastName}</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 8 }}>Style {styleScore(game.wardrobe.outfit)}/100 · {game.wardrobe.owned.length} items owned</Text>
+          <Button small label="👗 Closet & salon" onPress={() => openSheet({ t: 'closet' })} />
+        </View>
+      </Card>
       <Card style={{ marginBottom: 14 }}>
         {STAT_KEYS.map((k) => <StatBar key={k} label={STAT_LABELS[k]} value={ch.stats[k]} color={statColors[k]} />)}
       </Card>
+
+      {(ch.sports ?? []).length > 0 ? (
+        <View>
+          <SectionTitle>Sports</SectionTitle>
+          <Card style={{ marginBottom: 14 }}>
+            {(ch.sports ?? []).map((e) => (
+              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
+                <Text style={{ fontSize: 24, marginRight: 10 }}>{SPORT_BY_ID[e.id].icon}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.text, fontWeight: '700' }}>{SPORT_BY_ID[e.id].label} · {e.pos}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>{levelName(e.level, e.id)} · {e.years} season{e.years === 1 ? '' : 's'}{e.titles ? ` · ${e.titles} title${e.titles > 1 ? 's' : ''}` : ''}</Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
+
+      {L.heat > 0 || L.record.length > 0 || L.uncaught.length > 0 || L.prison || L.probation ? (
+        <View>
+          <SectionTitle>Legal</SectionTitle>
+          <Card style={{ marginBottom: 14, borderColor: L.prison ? colors.danger : colors.border }}>
+            {L.prison ? <Text style={{ color: colors.danger, fontWeight: '800', marginBottom: 6 }}>⛓️ In {L.prison.facility}: {L.prison.yearsLeft} of {L.prison.total} years left</Text> : null}
+            {L.fugitive ? <Text style={{ color: colors.danger, fontWeight: '800', marginBottom: 6 }}>🚨 You are a fugitive</Text> : null}
+            {L.probation ? <Text style={{ color: '#E0B866', fontWeight: '700', marginBottom: 6 }}>On probation: {L.probation} year{L.probation > 1 ? 's' : ''} left</Text> : null}
+            <StatBar label="Heat (police attention)" value={L.heat} color={L.heat > 50 ? colors.danger : '#E0B866'} thin />
+            <StatBar label="Street reputation" value={L.underworld} color="#8B7BF0" thin />
+            {L.record.length > 0 ? (
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Criminal record</Text>
+                {L.record.slice(-6).map((r, i) => <Text key={i} style={{ color: colors.text, fontSize: 13, marginBottom: 2 }}>• {r.label} ({r.year}): {r.outcome}</Text>)}
+              </View>
+            ) : <Text style={{ color: colors.good, fontSize: 12, marginTop: 6 }}>Clean record</Text>}
+            {L.uncaught.length > 0 ? <Text style={{ color: colors.muted, fontSize: 11, marginTop: 8, fontStyle: 'italic' }}>You carry {L.uncaught.length} secret{L.uncaught.length > 1 ? 's' : ''}. They can resurface at any time.</Text> : null}
+          </Card>
+        </View>
+      ) : null}
 
       <SectionTitle>Skills</SectionTitle>
       <Card style={{ marginBottom: 14 }}>

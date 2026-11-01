@@ -1,8 +1,12 @@
 // Procedural art made only from <View>s: gradients, portraits, and life-stage scenery.
-// No images, no SVG library, so it works everywhere and costs nothing to ship.
+// People are drawn by avatar.tsx (react-native-svg); scenes and gradients stay plain Views.
 import React from 'react';
 import { Text, View } from 'react-native';
 import { hash, lerpColor, seeded } from './fx.ts';
+import type { Outfit } from '../engine/types.ts';
+import { lookFromSeed } from '../engine/looks.ts';
+import { Avatar } from './avatar.tsx';
+import { useGame } from '../store/GameContext.tsx';
 
 // ───────── Gradient ─────────
 export function Gradient({
@@ -27,76 +31,36 @@ export function Gradient({
 }
 
 // ───────── Portrait ─────────
-const SKIN = ['#F6D6BD', '#F1C7A5', '#E3A982', '#C98B64', '#A56A45', '#7B4B2E'];
-const HAIR = ['#1B1410', '#3B2416', '#6B4423', '#A0672B', '#D2A24C', '#B5472B'];
-const CLOTH = ['#4FD1B5', '#E0B866', '#A58BF5', '#F08BB5', '#5AA9F0', '#F0716B', '#5BD38A', '#E8E4D8'];
-const BG: [string, string][] = [
-  ['#27406B', '#16213A'], ['#3D2B58', '#1B1530'], ['#1F4B4A', '#10262A'], ['#5A3A2A', '#2A1A14'], ['#2F3E66', '#1A2238'],
-];
+// Everyone is drawn by the same Avatar. You wear what you bought; everyone else gets a stable look from their name.
+const TOPS = ['tee_white', 'tee_navy', 'hoodie_grey', 'tee_red', 'polo', 'flannel', 'sweater_cream', 'dress_shirt', 'blouse', 'hoodie_black', 'sundress', 'tee_graphic'];
+const BGS = ['bg_dawn', 'bg_sky', 'bg_forest', 'bg_sunset', 'bg_night'];
+
+export function otherOutfit(name: string, age: number, gender?: string): Outfit {
+  const h = hash(name + 'outfit');
+  const fem = (gender ?? '').toLowerCase().startsWith('f');
+  const pool = fem ? TOPS : TOPS.filter((x) => x !== 'sundress' && x !== 'blouse');
+  const o: Outfit = { top: pool[h % pool.length], bg: BGS[(h >> 3) % BGS.length] };
+  if (age >= 45 && h % 3 === 0) o.glasses = 'g_round';
+  else if (age >= 14 && h % 7 === 0) o.glasses = 'g_square';
+  if (fem && age >= 18 && h % 5 === 0) o.ears = 'e_stud';
+  return o;
+}
 
 export function Portrait({
   name, age = 25, size = 56, ring, style, gender,
-}: { name: string; age?: number; size?: number; ring?: string; style?: any; gender?: string }) {
-  const h = hash(name);
-  const r = seeded(h);
-  const skin = SKIN[Math.floor(r() * SKIN.length)];
-  const hairBase = HAIR[Math.floor(r() * HAIR.length)];
-  const cloth = CLOTH[Math.floor(r() * CLOTH.length)];
-  const bg = BG[Math.floor(r() * BG.length)];
-  const g = (gender ?? '').toLowerCase();
-  const longBias = g.startsWith('f') ? 0.65 : g.startsWith('m') ? 0.1 : 0.35;
-  const long = r() < longBias;
-  const bun = !long && r() < 0.18;
-  const bald = !long && !bun && age >= 45 && r() < 0.28;
-  const hair = age >= 65 ? '#C9CBD3' : age >= 48 ? lerpColor(hairBase, '#B8BAC4', 0.45) : hairBase;
-  const baby = age < 4;
-  const kid = age < 13;
-  const S = size;
-  const headW = S * (baby ? 0.5 : kid ? 0.44 : 0.38);
-  const headH = S * (baby ? 0.5 : kid ? 0.46 : 0.44);
-  const headTop = S * (baby ? 0.28 : kid ? 0.3 : 0.2);
-  const cx = (w: number) => (S - w) / 2;
-  const eyeY = headTop + headH * 0.5;
-  const dark = '#1A1411';
-
+}: { name: string; age?: number; size?: number; ring?: string; style?: any; gender?: string; looks?: number }) {
+  const { game } = useGame();
+  const me = game && name === `${game.character.firstName} ${game.character.lastName}`;
+  const look = me ? game.wardrobe.look : lookFromSeed(name, gender ?? genderFromName(name));
+  let outfit = me ? game.wardrobe.outfit : otherOutfit(name, age, gender);
+  if (me && game.legal.prison) outfit = { ...outfit, top: 'prison', outer: undefined, hat: undefined, neck: undefined };
   return (
-    <View style={[{ width: S, height: S, borderRadius: S / 2, overflow: 'hidden', borderWidth: ring ? Math.max(2, S * 0.045) : 0, borderColor: ring ?? 'transparent', backgroundColor: bg[1] }, style]}>
-      <Gradient stops={bg} steps={8} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
-      {/* long back hair */}
-      {long && !baby ? <View style={{ position: 'absolute', top: headTop - S * 0.04, left: cx(headW * 1.28), width: headW * 1.28, height: headH * 1.45, borderRadius: S * 0.2, backgroundColor: hair }} /> : null}
-      {/* shoulders */}
-      <View style={{ position: 'absolute', bottom: -S * 0.2, left: cx(S * (baby ? 0.62 : 0.8)), width: S * (baby ? 0.62 : 0.8), height: S * 0.52, borderTopLeftRadius: S * 0.4, borderTopRightRadius: S * 0.4, backgroundColor: cloth }} />
-      {/* collar */}
-      <View style={{ position: 'absolute', top: headTop + headH * 0.92, left: cx(S * 0.2), width: S * 0.2, height: S * 0.14, borderBottomLeftRadius: S * 0.1, borderBottomRightRadius: S * 0.1, backgroundColor: lerpColor(skin.length === 7 ? skin : '#C98B64', '#000000', 0.12) }} />
-      {/* head */}
-      <View style={{ position: 'absolute', top: headTop, left: cx(headW), width: headW, height: headH, borderRadius: headW / 2, backgroundColor: skin }} />
-      {/* ears */}
-      {!baby ? (
-        <>
-          <View style={{ position: 'absolute', top: eyeY - S * 0.02, left: cx(headW) - S * 0.025, width: S * 0.05, height: S * 0.08, borderRadius: S * 0.03, backgroundColor: skin }} />
-          <View style={{ position: 'absolute', top: eyeY - S * 0.02, left: cx(headW) + headW - S * 0.025, width: S * 0.05, height: S * 0.08, borderRadius: S * 0.03, backgroundColor: skin }} />
-        </>
-      ) : null}
-      {/* hair cap */}
-      {!bald ? (
-        <View style={{ position: 'absolute', top: headTop - S * (baby ? 0.0 : 0.045), left: cx(headW * 1.08), width: headW * 1.08, height: headH * (baby ? 0.22 : long ? 0.42 : 0.4), borderTopLeftRadius: headW * 0.55, borderTopRightRadius: headW * 0.55, borderBottomLeftRadius: S * 0.05, borderBottomRightRadius: S * 0.05, backgroundColor: hair }} />
-      ) : null}
-      {bun ? <View style={{ position: 'absolute', top: headTop - S * 0.13, left: cx(S * 0.16), width: S * 0.16, height: S * 0.16, borderRadius: S * 0.08, backgroundColor: hair }} /> : null}
-      {/* eyes */}
-      <View style={{ position: 'absolute', top: eyeY, left: S / 2 - headW * 0.24 - S * 0.022, width: S * 0.044, height: S * 0.044, borderRadius: S * 0.022, backgroundColor: dark }} />
-      <View style={{ position: 'absolute', top: eyeY, left: S / 2 + headW * 0.24 - S * 0.022, width: S * 0.044, height: S * 0.044, borderRadius: S * 0.022, backgroundColor: dark }} />
-      {/* smile */}
-      <View style={{ position: 'absolute', top: eyeY + headH * 0.22, left: cx(S * 0.11), width: S * 0.11, height: S * 0.055, borderBottomLeftRadius: S * 0.06, borderBottomRightRadius: S * 0.06, borderBottomWidth: Math.max(1.5, S * 0.02), borderLeftWidth: Math.max(1.5, S * 0.02), borderRightWidth: Math.max(1.5, S * 0.02), borderColor: '#7A3B2E' }} />
-      {/* elder glasses */}
-      {age >= 60 ? (
-        <>
-          <View style={{ position: 'absolute', top: eyeY - S * 0.03, left: S / 2 - headW * 0.24 - S * 0.05, width: S * 0.1, height: S * 0.1, borderRadius: S * 0.05, borderWidth: Math.max(1, S * 0.014), borderColor: '#1A1411' }} />
-          <View style={{ position: 'absolute', top: eyeY - S * 0.03, left: S / 2 + headW * 0.24 - S * 0.05, width: S * 0.1, height: S * 0.1, borderRadius: S * 0.05, borderWidth: Math.max(1, S * 0.014), borderColor: '#1A1411' }} />
-        </>
-      ) : null}
+    <View style={[{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', borderWidth: ring ? Math.max(2, size * 0.045) : 0, borderColor: ring ?? 'transparent', backgroundColor: '#1B2338' }, style]}>
+      <Avatar look={look} outfit={outfit} age={age} size={size} />
     </View>
   );
 }
+const genderFromName = (n: string) => (hash(n) % 2 ? 'Female' : 'Male');
 
 // ───────── Life-stage scenery ─────────
 export type Stage = 'child' | 'teen' | 'young' | 'adult' | 'elder';
@@ -155,6 +119,7 @@ export const CAT_STYLE: Record<string, { stops: string[]; emoji: string }> = {
   money: { stops: ['#7A5A12', '#E0B866'], emoji: '💰' },
   legacy: { stops: ['#4B2C8C', '#E0B866'], emoji: '📜' },
   life: { stops: ['#2D3A8C', '#8B7BF0'], emoji: '✨' },
+  crime: { stops: ['#3A0F14', '#B3202F'], emoji: '🚨' },
 };
 
 export function Banner({ cat, height = 96, emojiOverride }: { cat: string; height?: number; emojiOverride?: string }) {

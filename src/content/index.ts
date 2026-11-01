@@ -1,6 +1,7 @@
 // Content registry. To add a new pack: write its events file, import it here, add a PackInfo.
 import type { EventDef } from '../engine/types.ts';
 import { CORE_EVENTS } from './core.ts';
+import { LEGAL_EVENTS } from './legal.ts';
 import { ENTREPRENEUR_EVENTS } from './entrepreneur.ts';
 import { WANDERLUST_EVENTS } from './wanderlust.ts';
 
@@ -25,7 +26,7 @@ export const PACKS: PackInfo[] = [
     tagline: 'The full life, from first steps to final years.',
     description: 'School, work, love, family, money, health and the family legacy system.',
     premium: false,
-    events: CORE_EVENTS,
+    events: [...CORE_EVENTS, ...LEGAL_EVENTS],
   },
   {
     id: 'entrepreneur',

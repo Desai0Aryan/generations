@@ -24,6 +24,13 @@ preview/                     browser build (shims real React Native components f
 - `ui/sheets.tsx`: bottom sheets (action, person, job board). `ui/art.tsx`, `ui/fx.ts`: procedural art and animation/haptics.
 - Save version is 2; `store/storage.ts` migrates v1 saves.
 
+## Part 3 additions
+- `engine/legal.ts`: heat, hidden cases, verdicts, prison, parole. `engine/closet.ts`: buying and wearing clothes. `engine/looks.ts`: faces from names.
+- Wizards: `WizardDef` in `engine/types.ts`, content in `content/wizards.ts`, `crimes.ts`, `sports.ts`, `people.ts`. A wizard is `steps(state, picks)` (what to show next) plus `run(state, picks)` (what happens). Add one to `WIZARDS` and it appears in the Do tab.
+- Events whose id starts with `pr_` only fire in prison; all others are skipped there.
+- `ui/avatar.tsx` draws people with react-native-svg; `ui/closet.tsx` is the closet; `preview/shims/svg.tsx` lets the browser preview draw the same SVG.
+- Save version is 3.
+
 ## Why this scales
 - **Events are data.** A pack is an array of `EventDef`. Add 500 events without touching the engine. Later they can be downloaded
   from a server so you can ship new story content without an App Store update.

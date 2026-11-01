@@ -21,6 +21,8 @@ import { getEvent, eventsForPacks } from '../content/index.ts';
 import { FIELD_BY_ID } from '../content/jobs.ts';
 import { DEGREE_LABEL } from '../content/education.ts';
 import { loansBalance, netWorth } from './finance.ts';
+import { legalYear, newLegal, queueArrest } from './legal.ts';
+import { heirWardrobe, newWardrobe } from './looks.ts';
 
 export const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 export const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -114,6 +116,10 @@ function buildNewGame(opts: NewGameOptions): GameState {
     assets: [],
     loans: [],
     actionLog: {},
+    yearActs: {},
+    pools: {},
+    legal: newLegal(),
+    wardrobe: newWardrobe(`${opts.firstName.trim() || 'Alex'} ${opts.lastName.trim() || 'Stonefield'}`, opts.gender),
     nextId: 1,
   };
   const ch = s.character;
@@ -147,9 +153,11 @@ export function ageUp(prev: GameState): GameState {
   s.year += 1;
   ch.age += 1;
   s.actionsLeft = SLOTS_PER_YEAR;
+  s.yearActs = {};
 
   ageRelationships(s);
   passiveYear(s);
+  queueArrest(s);
 
   const cause = naturalDeath(s);
   if (cause) {
@@ -246,6 +254,8 @@ function passiveYear(s: GameState): void {
   const ch = s.character;
   const st = ch.stats;
   const bg = BACKGROUNDS[ch.background];
+  const jailed = legalYear(s);
+  if (jailed && ch.school) { ch.school = undefined; ch.flags.inCollege = false; addFeed(s, 'Your studies end behind bars.', 'system', 'crime'); }
 
   // body & mind drift
   if (ch.age < 45 && st.health < 88) st.health = clamp(st.health + int(s, 1, 3));
@@ -271,7 +281,7 @@ function passiveYear(s: GameState): void {
   }
 
   // income & career
-  if (ch.job) {
+  if (ch.job && !jailed) {
     const j = ch.job;
     if (ch.retired) {
       ch.money += Math.round(j.salary * 0.55);
@@ -331,7 +341,7 @@ function passiveYear(s: GameState): void {
 
   // expenses & family support
   const parentAlive = livingRels(s, 'parent').length > 0;
-  if (ch.age >= 18) {
+  if (ch.age >= 18 && !jailed) {
     const kids = livingRels(s, 'child').filter((c) => c.age < 18).length;
     const inflation = Math.pow(1.018, Math.max(0, ch.age - 18));
     let cost = (ch.flags.owns_home ? 15000 : 23000) * inflation;
@@ -477,6 +487,10 @@ export function continueAs(prev: GameState, childId: string): GameState {
   s.assets = kept.map((a) => ({ ...a, id: uid(s, 'a'), loanId: undefined }));
   s.loans = [];
   s.actionLog = {};
+  s.yearActs = {};
+  s.pools = {};
+  s.legal = newLegal();
+  s.wardrobe = heirWardrobe(s.wardrobe, `${firstName} ${s.family.surname}`, old.gender);
   s.relationships = newRels;
   if (heir.age >= 6) {
     const f = makeRel(s, 'friend', heir.age + int(s, -1, 1), int(s, 40, 70));
@@ -520,7 +534,9 @@ interface Candidate {
 function eligible(s: GameState): Candidate[] {
   const out: Candidate[] = [];
   const age = s.character.age;
+  const locked = !!s.legal.prison;
   for (const ev of eventsForPacks(s.packs)) {
+    if (locked ? !ev.id.startsWith('pr_') : ev.id.startsWith('pr_')) continue;
     if (age < ev.minAge || age > ev.maxAge) continue;
     const h = s.eventHistory[ev.id];
     if (h) {
@@ -666,10 +682,10 @@ export function resolveChoice(prev: GameState, index: number): GameState {
       return (o.weight ?? 1) + bias;
     }) ?? choice.outcomes[0];
 
-  const ctx = { targetId: pending.targetId, died: undefined as string | undefined };
+  const ctx = { targetId: pending.targetId, died: undefined as string | undefined, notes: [] as string[] };
   applyEffects(s, outcome.effects, ctx);
   const target = s.relationships.find((r) => r.id === ctx.targetId);
-  const text = fill(s, outcome.text, target);
+  const text = fill(s, outcome.text, target) + (ctx.notes?.length ? ' ' + ctx.notes.join(' ') : '');
 
   pending.stage = 'result';
   pending.choiceIndex = index;
@@ -717,14 +733,18 @@ export type Interaction = 'time' | 'call' | 'gift';
 
 export function interact(prev: GameState, relId: string, action: Interaction): GameState {
   const r0 = prev.relationships.find((r) => r.id === relId);
-  if (!r0 || !r0.alive || prev.actionsLeft <= 0 || prev.phase !== 'alive') return prev;
+  if (!r0 || !r0.alive || prev.phase !== 'alive' || prev.legal.prison) return prev;
   if (action === 'gift' && prev.character.money < 50) return prev;
   const s = clone(prev);
   const r = s.relationships.find((x) => x.id === relId)!;
   const first = r.name.split(' ')[0];
-  s.actionsLeft -= 1;
+  s.actionsLeft = Math.max(0, s.actionsLeft - 1);
+  const k = `iact:${r.id}`;
+  const n = s.yearActs[k] ?? 0;
+  s.yearActs[k] = n + 1;
+  const f = n === 0 ? 1 : Math.max(0.25, 1 / (1 + 0.6 * n));
   if (action === 'time') {
-    r.closeness = clamp(r.closeness + 8);
+    r.closeness = clamp(r.closeness + Math.max(1, Math.round(8 * f)));
     s.character.stats.happiness = clamp(s.character.stats.happiness + 2);
     addFeed(s, `You spent quality time with ${first}.`, 'system');
   } else if (action === 'call') {

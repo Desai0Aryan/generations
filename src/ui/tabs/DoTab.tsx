@@ -1,22 +1,23 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { Card, Row, TimeDots } from '../components.tsx';
+import { Card, Row } from '../components.tsx';
 import { colors, fmtMoney, serif } from '../theme.ts';
 import { useGame } from '../../store/GameContext.tsx';
-import { actionStatus } from '../../engine/actions.ts';
+import { actionStatus, wizardStatus } from '../../engine/actions.ts';
+import { WIZARDS } from '../../content/wizards.ts';
 import { ACTIONS, GROUP_INFO } from '../../content/actions.ts';
-import { SLOTS_PER_YEAR, type ActionGroup } from '../../engine/types.ts';
+import type { ActionGroup } from '../../engine/types.ts';
 import { useSheets } from '../sheets.tsx';
 import { Gradient } from '../art.tsx';
 import { tap } from '../fx.ts';
 
-const ORDER: ActionGroup[] = ['love', 'social', 'school', 'career', 'sports', 'money', 'health', 'family', 'life'];
+const ORDER: ActionGroup[] = ['prison', 'love', 'social', 'school', 'career', 'sports', 'money', 'health', 'family', 'life', 'crime'];
 const HIDE = (r?: string) => !r || r === 'Not available right now' || r.startsWith('Age ') || r === 'Too late for this';
 
 export function DoTab() {
   const { game, perform } = useGame();
   const { open } = useSheets();
-  const [openGroup, setOpenGroup] = useState<ActionGroup | null>('career');
+  const [openGroup, setOpenGroup] = useState<ActionGroup | null>(null);
   if (!game) return null;
   const ch = game.character;
 
@@ -25,15 +26,21 @@ export function DoTab() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
         <View>
           <Text style={{ color: colors.text, fontFamily: serif, fontSize: 26 }}>What will you do?</Text>
-          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Free time this year</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>No limits. Do as much as you like.</Text>
         </View>
-        <TimeDots left={game.actionsLeft} total={SLOTS_PER_YEAR} />
       </View>
       <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 12 }}>
-        Everything here is your choice. Spend free time on people, skills and ambitions, then age up when you are ready.
+        Everything here is your choice. Do things as often as you want (repeating the same thing has diminishing returns), then age up when you are ready.
       </Text>
 
-      {ch.age >= 14 ? (
+      {game.legal.prison ? (
+        <Card style={{ marginBottom: 14, borderColor: colors.danger }}>
+          <Text style={{ color: colors.danger, fontWeight: '800', fontSize: 16 }}>⛓️ {game.legal.prison.facility}</Text>
+          <Text style={{ color: colors.muted, marginTop: 4 }}>{game.legal.prison.yearsLeft} year{game.legal.prison.yearsLeft === 1 ? '' : 's'} left of {game.legal.prison.total} · conduct {game.legal.prison.conduct}{game.legal.prison.crew ? ' · in a crew' : ''}. Only prison activities are possible.</Text>
+        </Card>
+      ) : null}
+
+      {ch.age >= 14 && !game.legal.prison ? (
         <View style={{ marginBottom: 14, borderRadius: 16, overflow: 'hidden' }}>
           <Gradient stops={['#2B3A55', '#5C7BA6']} style={{ padding: 16 }}>
             <Text style={{ color: '#FFFFFF', fontFamily: serif, fontSize: 20 }}>💼 Job board</Text>
@@ -47,13 +54,14 @@ export function DoTab() {
         </View>
       ) : null}
 
-      {ORDER.map((g) => {
+      {ORDER.filter((g) => !game.legal.prison || g === 'prison').map((g) => {
         const info = GROUP_INFO[g];
         const items = ACTIONS.filter((a) => a.group === g && !a.target)
           .map((a) => ({ a, st: actionStatus(game, a) }))
           .filter(({ st }) => HIDE(st.reason) ? st.ok : true);
-        if (items.length === 0) return null;
-        const avail = items.filter((x) => x.st.ok).length;
+        const wiz = WIZARDS.filter((w) => w.group === g).map((w) => ({ w, st: wizardStatus(game, w) })).filter(({ st }) => HIDE(st.reason) || st.ok ? st.ok : true);
+        if (items.length === 0 && wiz.length === 0) return null;
+        const avail = items.filter((x) => x.st.ok).length + wiz.filter((x) => x.st.ok).length;
         const isOpen = openGroup === g;
         return (
           <View key={g} style={{ marginBottom: 10 }}>
@@ -68,6 +76,9 @@ export function DoTab() {
               </Pressable>
               {isOpen ? (
                 <View style={{ paddingHorizontal: 12, paddingBottom: 6 }}>
+                  {wiz.map(({ w, st }) => (
+                    <Row key={w.id} icon={w.icon} title={w.label} sub={st.ok ? w.hint : st.reason} tone={st.ok ? undefined : 'danger'} disabled={!st.ok} right={<Text style={{ color: colors.gold, fontSize: 11, fontWeight: '800' }}>PICK</Text>} onPress={() => open({ t: 'wizard', wizId: w.id })} />
+                  ))}
                   {items.map(({ a, st }) => (
                     <Row
                       key={a.id}

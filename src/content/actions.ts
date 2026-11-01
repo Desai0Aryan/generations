@@ -29,41 +29,12 @@ export const GROUP_INFO: Record<ActionGroup, { label: string; icon: string; blur
   health: { label: 'Health & Looks', icon: '🌿', blurb: 'Mind, body and the mirror' },
   family: { label: 'Home & Family', icon: '🏡', blurb: 'Where you live and who you live for' },
   life: { label: 'Skills & Lifestyle', icon: '✨', blurb: 'Hobbies, lessons and licenses' },
+  crime: { label: 'The Dark Side', icon: '🕶️', blurb: 'Crime, heat and the law' },
+  prison: { label: 'Life Inside', icon: '⛓️', blurb: 'Time, conduct and getting out' },
 };
 
 export const ACTIONS: ActionDef[] = [
   // ═════════ LOVE & DATING ═════════
-  A('love_teen_ask', 'love', '💌', 'Ask someone out', 'Teen romance, nerves included', { min: 13, max: 17, req: [noRel('partner')] }, one([
-    out('They say yes! You spend the whole year grinning like an idiot.', [addRel('partner', { closeness: 55, bind: true }), stat('happiness', 8), mem('My first crush said yes.', ['love'], 2)], 1, { k: 'looks', amt: 1 }),
-    out('They smile kindly and say they would rather stay friends. It stings, but you keep a good friend.', [addRel('friend', { closeness: 55 }), stat('happiness', -2)], 1),
-    out('You chicken out at the last second and pretend you just wanted to borrow a pencil.', [stat('happiness', -3)], 1),
-  ])),
-  A('love_app', 'love', '📱', 'Try a dating app', 'Swipe, chat, hope', { min: 18, req: [noRel('partner')] }, one([
-    out('A real connection. You message for a week, meet for coffee, and it just clicks.', [addRel('partner', { closeness: 52, bind: true }), stat('happiness', 7), mem('Met someone through a dating app and it actually worked.', ['love'], 2)], 1, { k: 'looks', amt: 1.2 }),
-    out('A fun, no-strings kind of thing starts with someone new.', [addRel('fling', { closeness: 48, bind: true }), stat('happiness', 4)], 1.2),
-    out('Three terrible dates and one great story. No spark yet.', [stat('happiness', -1)], 2),
-    out('They look nothing like their photos. You leave early.', [stat('happiness', -2), money(-40)], 1),
-  ])),
-  A('love_out', 'love', '🍸', 'Go out for the night', 'Bars, clubs, strangers · $80', { min: 21, req: [noRel('partner')] }, [
-    opt('Go out', 'Cost $80', [
-      out('Someone across the room keeps catching your eye. By closing time you are exchanging numbers.', [addRel('fling', { closeness: 50, bind: true }), stat('happiness', 5)], 2, { k: 'looks', amt: 1 }),
-      out('You meet someone you could really see yourself with.', [addRel('partner', { closeness: 50, bind: true }), stat('happiness', 6)], 0.7, { k: 'looks', amt: 0.8 }),
-      out('Great night, no romance, one new friend.', [addRel('friend', { closeness: 45 }), stat('happiness', 3)], 1.5),
-      out('You wake up with a headache and no memory of the second half of the night.', [stat('health', -3), stat('happiness', -1)], 1.2),
-      out('A tense night ends with a scuffle outside. Your reputation takes a hit.', [stat('reputation', -4), stat('health', -3)], 0.4),
-    ], { cost: 80 }),
-  ]),
-  A('love_setup', 'love', '🫶', 'Ask friends to set you up', 'Trusted matchmakers', { min: 18, req: [noRel('partner'), hasRel('friend')] }, one([
-    out('A friend of a friend turns out to be perfect for you.', [addRel('partner', { closeness: 58, bind: true }), stat('happiness', 7), mem('A friend set me up with someone wonderful.', ['love'], 2)], 2),
-    out('It is awkward, but you both laugh about it afterwards.', [addRel('friend', { closeness: 50 }), stat('happiness', 2)], 2),
-    out('Your friends all think of different people and none of them fit.', [stat('happiness', -1)], 1),
-  ])),
-  A('love_flirt', 'love', '😏', 'Flirt with someone new', 'You are already in a relationship...', { min: 18, req: [hasRel('partner')] }, one([
-    out('A harmless exchange that makes your day. Nothing happens, and you both know it.', [stat('happiness', 2)], 2),
-    out('It goes further than it should. A secret now sits between you and your partner.', [addRel('fling', { closeness: 52, bind: true }), rtag('secret'), stat('happiness', 3), stat('reputation', -1)], 1.5),
-    out('Your partner finds out. The fallout is loud and painful.', [bond(-35, 'partner'), stat('reputation', -5), stat('happiness', -7), mem('I was unfaithful, and it cost me.', ['shame'], 2)], 1.3),
-  ])),
-
   // person actions: partners, flings, exes
   A('love_date', 'love', '🌹', 'Go on a date', 'Spend focused time together', { min: 14, target: { kind: ['partner', 'fling'] } }, [
     opt('A walk and a talk', 'Free', [out('You talk about nothing and everything for hours.', [bond(6), stat('happiness', 3)])]),
@@ -117,34 +88,6 @@ export const ACTIONS: ActionDef[] = [
   ])),
 
   // ═════════ FRIENDS & SOCIAL ═════════
-  A('soc_friends', 'social', '🙋', 'Make new friends', 'Put yourself out there', { min: 6 }, [
-    opt('Join a local club or team', undefined, [
-      out('You show up every week and soon you have people to sit with.', [addRel('friend', { closeness: 55 }), stat('happiness', 4)], 3),
-      out('Nobody really clicks. You try again next season.', [stat('happiness', -1)], 1),
-    ], { requires: [{ t: 'age', op: '>=', v: 8 }] }),
-    opt('Volunteer in your community', 'Reputation too', [
-      out('Hands-on work leads to a lasting friendship and a stronger name.', [addRel('friend', { closeness: 55 }), stat('reputation', 4), stat('happiness', 3)], 3),
-      out('A good cause and tired feet. You feel proud.', [stat('reputation', 3), stat('happiness', 2)], 1),
-    ], { requires: [{ t: 'age', op: '>=', v: 13 }] }),
-    opt('Talk to the neighbors', undefined, [
-      out('A quick chat over the fence turns into dinner invitations.', [addRel('friend', { closeness: 50 }), stat('happiness', 3)], 2),
-      out('Polite waves and little else.', [], 1),
-    ], { requires: [{ t: 'age', op: '>=', v: 10 }] }),
-    opt('Join an online community', undefined, [
-      out('You find your people in a late-night group chat.', [addRel('friend', { closeness: 50 }), stat('happiness', 3), skill('tech', 1)], 2),
-      out('The internet being the internet, you leave frustrated.', [stat('happiness', -2)], 1),
-    ], { requires: [{ t: 'age', op: '>=', v: 13 }] }),
-  ]),
-  A('soc_party', 'social', '🎉', 'Throw a party', 'Bring everyone together', { min: 16, req: [hasRel('friend')] }, [
-    opt('Backyard barbecue', 'Cost $200', [
-      out('Burgers, music, and a lot of laughter. Everyone leaves happy.', [bond(6, 'friend'), stat('happiness', 5), stat('reputation', 2)], 4),
-      out('It rains. You squeeze 20 people into the kitchen and it is somehow better.', [bond(7, 'friend'), stat('happiness', 4)], 1),
-    ], { cost: 200 }),
-    opt('Go all out', 'Cost $900', [
-      out('The party people will talk about for years.', [bond(10, 'friend'), stat('happiness', 7), stat('reputation', 4)], 3),
-      out('Things get out of hand. The neighbors call the cops and a vase will never recover.', [bond(5, 'friend'), stat('reputation', -3), money(-400)], 1),
-    ], { cost: 900, requires: [{ t: 'age', op: '>=', v: 18 }] }),
-  ]),
   A('soc_post', 'social', '📸', 'Post something online', 'Your corner of the internet', { min: 13, time: 0 }, one([
     out('It blows up. Strangers love it and your inbox is full of kind messages.', [stat('reputation', 5), stat('happiness', 4), skill('charisma', 1)], 0.6, { k: 'looks', amt: 0.5 }),
     out('A few likes and a lot of silence.', [], 3),
@@ -312,25 +255,7 @@ export const ACTIONS: ActionDef[] = [
   ])),
 
   // ═════════ SPORTS & FITNESS ═════════
-  A('sp_join', 'sports', '🏟️', 'Join a team', 'School or local league', { min: 8, max: 45, req: [noFlag('on_team')] }, one([
-    out('You make the team and gain a locker, a jersey and a bunch of teammates.', [flag('on_team'), skill('athletics', 4), addRel('friend', { closeness: 58 }), stat('happiness', 5)], 3, { k: 'health', amt: 1 }),
-    out('You get cut. It hurts, but you will be back next season.', [skill('athletics', 1), stat('happiness', -3)], 1),
-  ])),
-  A('sp_leave', 'sports', '🧢', 'Leave your team', 'Hang up the jersey', { min: 8, time: 0, req: [hasFlag('on_team')] }, one([
-    out('You turn in your jersey. Every ending is a beginning.', [flag('on_team', false), stat('happiness', -1)]),
-  ])),
-  A('sp_game', 'sports', '🏆', 'Play the big game', 'Compete', { min: 8, req: [hasFlag('on_team')] }, one([
-    out('You play the game of your life and the crowd roars.', [stat('reputation', 4), stat('happiness', 6), skill('athletics', 2)], 2, { k: 'health', amt: 1 }),
-    out('A narrow loss, but you left it all on the field.', [stat('happiness', -1), skill('athletics', 1)], 2),
-    out('A rough tackle ends your season early.', [stat('health', -9), skill('athletics', -1), stat('happiness', -4)], 0.6),
-    out('MVP. They call your name over the loudspeaker.', [stat('reputation', 8), stat('happiness', 9), skill('athletics', 3), mem('Won MVP in front of a roaring crowd.', ['sports'], 3)], 0.4, { k: 'health', amt: 1 }),
-  ])),
-  A('sp_train', 'sports', '🏋️', 'Work out', 'Build your body', { min: 10 }, [
-    opt('Light workout', 'Free', [out('A steady jog and some stretching. You feel good.', [stat('health', 3), skill('athletics', 2)])]),
-    opt('Intense training', undefined, [out('Sweat, shaking legs, a personal best.', [skill('athletics', 7), stat('health', -1), stat('happiness', 2)], 5), out('You push a bit too far and tweak something.', [skill('athletics', 3), stat('health', -9)], 1)]),
-    opt('Hire a coach', 'Cost $900', [out('Expert guidance makes every session count.', [skill('athletics', 9), stat('health', 2), stat('looks', 1)])], { cost: 900 }),
-  ]),
-  A('sp_scout', 'sports', '🎽', 'Impress college scouts', 'Win an athletic scholarship', { min: 16, max: 19, repeat: 'once', req: [notInSchool, skillIs('athletics', '>=', 62)] }, one([
+  A('sp_scout', 'sports', '🎽', 'Impress college scouts', 'Win an athletic scholarship', { min: 16, max: 19, repeat: 'once', req: [notInSchool, { t: 'sport', level: 2 }] }, one([
     out('A coach waves you over. A scholarship offer is in your hands.', [money(16000), stat('reputation', 5), stat('happiness', 8), mem('Earned an athletic scholarship offer.', ['sports', 'school'], 2)], 1, { k: 'health', amt: 1 }),
     out('Plenty of interest but no offers.', [stat('happiness', -1)], 1),
   ])),
@@ -345,10 +270,6 @@ export const ACTIONS: ActionDef[] = [
     opt('Individual stocks · $6,000', 'Pick winners', [out('A hot pick takes off. You feel like a genius.', [money(9800), stat('happiness', 3)], 2, { k: 'smarts', amt: 1 }), out('Mixed results and a few regrets.', [money(5400)], 2), out('One company crashes, and so does your return.', [money(3200), stat('happiness', -2)], 1)], { cost: 6000 }),
     opt('Crypto · $2,000', 'Wild ride', [out('To the moon. You cash out before the drop.', [money(7200), stat('happiness', 5)], 0.8), out('Mostly sideways, then down.', [money(900), stat('happiness', -2)], 3), out('It collapses entirely.', [stat('happiness', -4)], 1.2)], { cost: 2000 }),
     opt('Rental property · $30,000', 'Long-term income', [out('Reliable tenants, steady rent, rising value.', [money(38500), stat('reputation', 1)], 2), out('Repairs eat the profit.', [money(29500), stat('happiness', -1)], 1)], { cost: 30000 }),
-  ]),
-  A('mon_gamble', 'money', '🎰', 'Take a gamble', 'Fortune favors the bold', { min: 21 }, [
-    opt('Lottery ticket', 'Cost $20', [out('Not this time.', [], 190), out('A small prize: enough for dinner.', [money(100)], 8), out('JACKPOT. You scream in a convenience store.', [money(50000), stat('happiness', 12), mem('Won the lottery jackpot.', ['luck'], 3)], 0.3)], { cost: 20 }),
-    opt('Casino night', 'Cost $500', [out('A hot streak. You walk out ahead.', [money(1200), stat('happiness', 4)], 4), out('You break even and call it a good night.', [money(500)], 1), out('The house always wins. Ouch.', [stat('happiness', -3)], 5)], { cost: 500 }),
   ]),
   A('mon_donate', 'money', '❤️', 'Give to charity', 'Do some good', { min: 14, time: 0 }, [
     opt('$100', undefined, [out('A small gift that means something to somebody.', [stat('happiness', 2), stat('reputation', 1)])], { cost: 100 }),
@@ -409,20 +330,7 @@ export const ACTIONS: ActionDef[] = [
   A('fam_relocate', 'family', '🗺️', 'Move to a new city', 'Fresh start', { min: 18, max: 62 }, one([
     out('You start over somewhere new. It is lonely, exciting and a little scary.', [stat('happiness', 4), bond(-18, 'friend'), stat('smarts', 1), mem('Moved to a new city and started again.', ['milestone'], 2)]),
   ], { cost: 3000 })),
-  A('fam_vacation', 'family', '🏝️', 'Take a vacation', 'Go somewhere', { min: 6, time: 2 }, [
-    opt('Road trip', 'Cost $500', [out('Good music, bad snacks, wrong turns, great memories.', [stat('happiness', 6), bond(5, 'partner'), bond(5, 'child'), stat('health', 1)])], { cost: 500 }),
-    opt('Beach weekend', 'Cost $900', [out('Sun, sand and absolutely no email.', [stat('happiness', 7), stat('health', 2), bond(5, 'partner'), bond(5, 'child')])], { cost: 900 }),
-    opt('International trip', 'Cost $4,500', [out('New food, new streets, a new sense of how big everything is.', [stat('happiness', 11), stat('smarts', 2), stat('reputation', 1), mem('A trip abroad I will never forget.', ['travel'], 2)])], { cost: 4500, requires: [{ t: 'age', op: '>=', v: 16 }] }),
-  ]),
-
   // ═════════ SKILLS & LIFESTYLE ═════════
-  A('life_lessons', 'life', '🎸', 'Take lessons', 'Learn something new', { min: 6 }, [
-    opt('Music lessons', 'Cost $400', [out('Scales, songs, and a growing love of the sound.', [skill('creativity', 6), stat('happiness', 3)])], { cost: 400 }),
-    opt('Art class', 'Cost $300', [out('Charcoal on your hands and a sketchbook full of attempts.', [skill('creativity', 6), stat('happiness', 3)])], { cost: 300 }),
-    opt('Coding bootcamp', 'Cost $2,500', [out('Twelve intense weeks. You finish with real projects.', [skill('tech', 10), stat('smarts', 2)])], { cost: 2500, requires: [{ t: 'age', op: '>=', v: 14 }] }),
-    opt('Public speaking club', 'Cost $150', [out('Sweaty palms become steady ones. You can hold a room.', [skill('charisma', 7), stat('reputation', 2)])], { cost: 150, requires: [{ t: 'age', op: '>=', v: 12 }] }),
-    opt('Debate team', 'Free', [out('You learn to think on your feet and to enjoy winning an argument.', [skill('charisma', 4), stat('smarts', 1)])], { requires: [{ t: 'age', op: '>=', v: 12 }] }),
-  ]),
   A('life_read', 'life', '📖', 'Read a good book', 'Time well spent', { min: 7 }, one([
     out('You disappear into someone else\'s world and come back a little wiser.', [stat('smarts', 2), stat('happiness', 1)]),
   ])),
@@ -430,6 +338,63 @@ export const ACTIONS: ActionDef[] = [
     out('You pass. The keys feel like a tiny piece of freedom.', [flag('licensed'), stat('happiness', 6)], 3, { k: 'smarts', amt: 1 }),
     out('You fail by two points. Try again next year.', [stat('happiness', -2)], 1),
   ], { cost: 100 })),
+
+  // ═════════ DATING PREFERENCES ═════════
+  A('love_pref', 'love', '🧭', 'Who are you into?', 'Set who shows up when you look for love', { min: 12, time: 0, repeat: 'any' }, [
+    opt('Women', undefined, [out('You know what you like.', [flag('pref_f'), flag('pref_m', false), flag('pref_nb', false)])]),
+    opt('Men', undefined, [out('You know what you like.', [flag('pref_m'), flag('pref_f', false), flag('pref_nb', false)])]),
+    opt('Non-binary people', undefined, [out('You know what you like.', [flag('pref_nb'), flag('pref_f', false), flag('pref_m', false)])]),
+    opt('Everyone', undefined, [out('Hearts are not picky. Neither are you.', [flag('pref_f'), flag('pref_m'), flag('pref_nb')])]),
+  ]),
+
+  // ═════════ MORE SCHOOL LIFE ═════════
+  A('sch_life', 'school', '🎒', 'School life', 'Make your own kind of school year', { min: 6, max: 18, time: 0, repeat: 'any' }, [
+    opt('Be the class clown', 'Popular, but teachers notice', [out('Everyone laughs. The principal does not.', [stat('reputation', 3), skill('charisma', 3), stat('smarts', -1)], 3), out('The joke lands wrong and you are in detention.', [stat('reputation', -3), stat('happiness', -2)], 1)]),
+    opt('Stand up to a bully', undefined, [out('You do the brave thing. Others cheer you on.', [stat('reputation', 5), stat('happiness', 4), skill('charisma', 2)], 3), out('It gets physical and you both end up in the office.', [stat('health', -4), stat('reputation', -2)], 1.4)]),
+    opt('Run for class president', undefined, [out('A rousing speech and a landslide. You are president!', [stat('reputation', 7), skill('charisma', 4), stat('happiness', 6)], 1.5, { k: 'reputation', amt: 1 }), out('You lose by three votes. Painful.', [stat('happiness', -3), skill('charisma', 1)], 2)], { requires: [{ t: 'age', op: '>=', v: 12 }] }),
+    opt('Cut class with friends', undefined, [out('A perfect afternoon at the arcade.', [stat('happiness', 4), stat('smarts', -1)], 3), out('Busted. Detention and a call home.', [stat('reputation', -2), stat('happiness', -2), stat('smarts', -1)], 1.5)], { requires: [{ t: 'age', op: '>=', v: 12 }] }),
+    opt('Copy someone\'s homework', undefined, [out('Nobody notices. You feel only slightly bad.', [stat('happiness', 1)], 3), out('The teacher moves you to the front row and you get a zero.', [stat('smarts', -1), stat('reputation', -3)], 1.5)]),
+    opt('Start a rumor about someone', 'Mean, effective, risky', [out('It spreads like fire. Someone else takes the hit.', [stat('reputation', -2), stat('happiness', 1)], 2), out('It gets traced back to you and ruins your week.', [stat('reputation', -6), stat('happiness', -4)], 2)], { requires: [{ t: 'age', op: '>=', v: 12 }] }),
+    opt('Sit with someone new at lunch', undefined, [out('A kind gesture becomes a new friendship.', [addRel('friend', { closeness: 55 }), stat('happiness', 4)], 3), out('They seem surprised. Maybe next time.', [stat('happiness', 0)], 1)]),
+  ]),
+
+  // ═════════ MORE WORK LIFE ═════════
+  A('car_office', 'career', '🏢', 'Office politics', 'Play the game your way', { min: 18, time: 0, repeat: 'any', req: [employed()] }, [
+    opt('Befriend your boss', undefined, [out('Golf, coffee and a surprisingly warm relationship.', [perf(8), stat('reputation', 2)], 2), out('They see through the flattery.', [perf(-3)], 1)]),
+    opt('Take credit for a project', 'Cheeky and risky', [out('The promotion committee is impressed.', [perf(12), stat('reputation', 1)], 2), out('A coworker blows the whistle.', [perf(-14), stat('reputation', -6)], 1.5)]),
+    opt('Gossip around the water cooler', undefined, [out('You learn a lot. People like you.', [skill('charisma', 2), addRel('coworker', { closeness: 50 })], 2), out('It gets back to the wrong person.', [perf(-6), stat('reputation', -3)], 1)]),
+    opt('Call in sick for fun', undefined, [out('A lovely day by the water.', [stat('happiness', 4), perf(-3)], 3), out('Your manager sees your social post. Awkward.', [perf(-10), stat('reputation', -3)], 1)]),
+    opt('Ask for a transfer', undefined, [out('A fresh team, a fresh start.', [perf(10), stat('happiness', 3)], 2), out('Request denied. The tension lingers.', [perf(-4)], 1)]),
+    opt('Blow the whistle on wrongdoing', 'Right thing, big risk', [out('The company is cleaned up and you are hailed as brave.', [stat('reputation', 8), stat('happiness', 4), perf(5)], 1), out('You are quietly pushed out.', [quit(), stat('reputation', 4), stat('happiness', -4)], 1)]),
+  ]),
+
+  // ═════════ HEALTH VICES ═════════
+  A('hl_vice', 'health', '🚬', 'Indulge a habit', 'Not always a good idea', { min: 15, time: 0, repeat: 'any' }, [
+    opt('Smoke or vape', undefined, [out('A quick high and a cough you will regret.', [stat('health', -3), stat('happiness', 1), flag('smoker')], 3)]),
+    opt('Drink too much', undefined, [out('A messy night. A worse morning.', [stat('health', -3), stat('happiness', 2), flag('drinks')], 3)], { requires: [{ t: 'age', op: '>=', v: 18 }] }),
+    opt('Try something stronger', 'Dangerous', [out('A wild few hours and a hangover that lasts days.', [stat('health', -7), stat('happiness', 3), flag('drug_use'), { t: 'heat', d: 4 }], 3), out('It goes badly. You wake up in the ER.', [stat('health', -20), stat('happiness', -8), money(-4000)], 1)], { requires: [{ t: 'age', op: '>=', v: 17 }] }),
+    opt('Go to rehab / quit', undefined, [out('A hard few months and a clearer head.', [stat('health', 8), stat('happiness', 4), flag('smoker', false), flag('drug_use', false), money(-3000)], 1, { k: 'smarts', amt: 1 })], { cost: 3000 }),
+  ]),
+
+  // ═════════ KEEPING OUT OF TROUBLE ═════════
+  A('crime_lowlow', 'crime', '🌫️', 'Lay low', 'Let the heat fade', { min: 12, time: 0, repeat: 'any', req: [{ t: 'legal', is: 'free' }] }, one([
+    out('A quiet, boring few months. The heat drops.', [{ t: 'heat', d: -18 }, stat('happiness', -1)], 3),
+    out('You spot the same car outside twice. You move apartments. The heat drops a lot.', [{ t: 'heat', d: -28 }, money(-800)], 1),
+  ])),
+  A('crime_payoff', 'crime', '🚔', 'Pay off a cop', 'Costs $5,000', { min: 18, time: 0, repeat: 'any', req: [{ t: 'legal', is: 'free' }, cash('>=', 5000)] }, one([
+    out('A friendly officer smiles. "Anything you need to know, I\'ll tell you."', [money(-5000), { t: 'heat', d: -22 }], 3),
+    out('The officer is honest. You are in trouble now.', [money(-5000), { t: 'heat', d: 15 }, stat('reputation', -4)], 1),
+  ])),
+  A('crime_fixer', 'crime', '🧰', 'Find a fixer', 'Make evidence disappear', { min: 18, time: 0, repeat: 'any', req: [{ t: 'legal', is: 'free' }, cash('>=', 10000)] }, one([
+    out('For a price, a stranger makes your problems go away.', [money(-10000), { t: 'heat', d: -30 }, { t: 'flag', k: 'used_fixer', v: true }], 2),
+    out('The fixer takes your money and vanishes.', [money(-10000)], 1),
+  ])),
+  A('crime_confess', 'crime', '🕊️', 'Turn yourself in', 'Clear your conscience', { min: 14, time: 0, repeat: 'any', req: [{ t: 'legal', is: 'free' }, anyOf(hasFlag('did_shoplift'), hasFlag('did_burglary'), hasFlag('did_corner'), hasFlag('did_card'), hasFlag('did_storerob'), hasFlag('did_gta'), hasFlag('did_embezzle'), hasFlag('did_assault'))] }, one([
+    out('You walk into the station and tell the truth. Your lawyer later says it was the best choice.', [stat('happiness', 8), stat('reputation', 2), { t: 'heat', d: -40 }, mem('I came clean, and it lifted a weight I had carried too long.', ['redemption'], 2)]),
+  ])),
+  A('crime_sealed', 'crime', '📁', 'Clear your record', 'Costs $6,000 · petty offences only', { min: 21, time: 0, repeat: 'any', req: [{ t: 'legal', is: 'record' }, { t: 'not', c: { t: 'legal', is: 'felon' } }, cash('>=', 6000)] }, one([
+    out('A lawyer files the petition. The record is sealed.', [money(-6000), { t: 'flag', k: 'record_sealed', v: true }, stat('happiness', 4)], 1),
+  ])),
 ];
 
 export const ACTION_BY_ID: Record<string, ActionDef> = Object.fromEntries(ACTIONS.map((a) => [a.id, a]));

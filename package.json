@@ -14,6 +14,7 @@
     "expo": "latest",
     "expo-haptics": "latest",
     "expo-status-bar": "latest",
+    "react-native-svg": "latest",
     "react-native-safe-area-context": "latest",
     "@react-native-async-storage/async-storage": "latest"
   },

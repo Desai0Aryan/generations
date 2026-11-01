@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameState } from '../engine/types.ts';
 import { SAVE_VERSION } from '../engine/types.ts';
+import { newLegal } from '../engine/legal.ts';
+import { newWardrobe } from '../engine/looks.ts';
 import { DEFAULT_ENTITLEMENTS, type Entitlements } from '../monetization/entitlements.ts';
 
 const SAVE_KEY = 'generations.save.v1';
@@ -28,6 +30,11 @@ function migrate(g: GameState): GameState | null {
   if (!g.loans) g.loans = [];
   if (!g.actionLog) g.actionLog = {};
   if (typeof g.actionsLeft !== 'number' || g.actionsLeft > 5) g.actionsLeft = 5;
+  // v2 -> v3: unlimited actions, legal record, wardrobe
+  if (!g.yearActs) g.yearActs = {};
+  if (!g.pools) g.pools = {};
+  if (!g.legal) g.legal = newLegal();
+  if (!g.wardrobe) g.wardrobe = newWardrobe(`${ch.firstName} ${ch.lastName}`, ch.gender);
   g.version = SAVE_VERSION;
   return g;
 }

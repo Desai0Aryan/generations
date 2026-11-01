@@ -1,9 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState, NewGameOptions } from '../engine/types.ts';
 import { ageUp, continueAs, dismissResult, interact, newGame, resolveChoice, type Interaction } from '../engine/lifecycle.ts';
-import { applyForJob, buyAsset, performAction, sellAsset } from '../engine/actions.ts';
+import { applyForJob, buyAsset, performAction, refreshPool, sellAsset, wizardRun } from '../engine/actions.ts';
+import { buyGarment, setLook, wear } from '../engine/closet.ts';
+import type { Look } from '../engine/types.ts';
+import type { Slot } from '../content/wardrobe.ts';
 import { clearGame, loadEntitlements, loadGame, loadMeta, saveEntitlements, saveGame, saveMeta, type Meta } from './storage.ts';
-import { DEFAULT_ENTITLEMENTS, ownedPackIds, purchase, restore, type Entitlements } from '../monetization/entitlements.ts';
+import { DEFAULT_ENTITLEMENTS, ownedCosmetics, ownedPackIds, purchase, restore, type Entitlements } from '../monetization/entitlements.ts';
 import { FREE_PACK_IDS } from '../content/index.ts';
 import { THEMES, type Product } from '../monetization/products.ts';
 import { ACHIEVEMENTS, type Achievement } from '../content/achievements.ts';
@@ -28,6 +31,12 @@ interface Ctx {
   applyJob: (fieldId: string) => void;
   buyItem: (itemId: string, mode: 'cash' | 'finance') => void;
   sellItem: (assetId: string) => void;
+  runWizard: (id: string, picks: string[]) => void;
+  refresh: (key: string) => void;
+  buyClothes: (id: string) => void;
+  wearItem: (slot: Slot, id: string | null) => void;
+  changeLook: (patch: Partial<Look>) => void;
+  cosmetics: string[];
   continueAs: (childId: string) => void;
   leaveGame: () => void;
   resetSave: () => Promise<void>;
@@ -122,6 +131,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     applyJob: (f) => mutate((g) => applyForJob(g, f)),
     buyItem: (id, mode) => mutate((g) => buyAsset(g, id, mode)),
     sellItem: (id) => mutate((g) => sellAsset(g, id)),
+    runWizard: (id, picks) => mutate((g) => wizardRun(g, id, picks)),
+    refresh: (key) => mutate((g) => refreshPool(g, key)),
+    buyClothes: (id) => mutate((g) => buyGarment(g, id, ownedCosmetics(entitlements))),
+    wearItem: (slot, id) => mutate((g) => wear(g, slot, id)),
+    changeLook: (patch) => mutate((g) => setLook(g, patch)),
+    cosmetics: ownedCosmetics(entitlements),
     continueAs: (id) => mutate((g) => continueAs(g, id)),
     leaveGame: () => {
       if (game) saveGame(game);

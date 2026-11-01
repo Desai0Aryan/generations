@@ -88,7 +88,7 @@ export function LifeTab() {
       <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg }}>
         <Button
           label={`Age Up  →  ${ch.age + 1}`}
-          sub={blocked ? 'Resolve the current event first' : `${game.actionsLeft} free-time ${game.actionsLeft === 1 ? 'slot' : 'slots'} left this year`}
+          sub={blocked ? 'Resolve the current event first' : game.legal.prison ? `${game.legal.prison.yearsLeft} year(s) left inside` : 'Do as much as you like this year first'}
           disabled={blocked}
           onPress={ageUp}
         />

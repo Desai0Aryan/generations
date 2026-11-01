@@ -3,7 +3,7 @@
 //   - applyForJob:   the job board
 //   - buyAsset / sellAsset: cars, homes, luxury, pets (with financing)
 // All pure: state in -> new state out.
-import type { ActionDef, ChoiceDef, Condition, EventDef, GameState, Relationship } from './types.ts';
+import type { ActionDef, ChoiceDef, Condition, Effect, EventDef, GameState, Relationship, WizardDef, WizStep } from './types.ts';
 import { EDU_RANK } from './types.ts';
 import { checkAll } from './conditions.ts';
 import { applyEffects } from './effects.ts';
@@ -14,10 +14,12 @@ import { amortize, creditLimit, loansBalance } from './finance.ts';
 import { ACTIONS, getAction } from '../content/actions.ts';
 import { CATALOG_BY_ID } from '../content/assets.ts';
 import { FIELD_BY_ID, type Field } from '../content/jobs.ts';
+import { WIZARDS, getWizard } from '../content/wizards.ts';
+import { queueArrest } from './legal.ts';
 
 type Cat = EventDef['category'];
 const GROUP_CAT: Record<ActionDef['group'], Cat> = {
-  love: 'love', social: 'friends', school: 'school', career: 'work', sports: 'health', money: 'money', health: 'health', family: 'family', life: 'life',
+  love: 'love', social: 'friends', school: 'school', career: 'work', sports: 'health', money: 'money', health: 'health', family: 'family', life: 'life', crime: 'crime', prison: 'crime',
 };
 
 const keyFor = (id: string, targetId?: string) => (targetId ? `${id}@${targetId}` : id);
@@ -29,6 +31,9 @@ export interface Status { ok: boolean; reason?: string }
 
 export function actionStatus(s: GameState, a: ActionDef, targetId?: string): Status {
   if (s.phase !== 'alive' || s.queue.length > 0) return { ok: false, reason: 'Finish what is happening first' };
+  const jailed = !!s.legal.prison;
+  if (jailed && a.group !== 'prison') return { ok: false, reason: 'Not possible in prison' };
+  if (!jailed && a.group === 'prison') return { ok: false, reason: 'Not available right now' };
   const age = s.character.age;
   if (age < a.minAge) return { ok: false, reason: `Age ${a.minAge}+` };
   if (age > a.maxAge) return { ok: false, reason: 'Too late for this' };
@@ -39,8 +44,6 @@ export function actionStatus(s: GameState, a: ActionDef, targetId?: string): Sta
   }
   const last = s.actionLog[keyFor(a.id, targetId)];
   if (a.repeat === 'once' && last !== undefined) return { ok: false, reason: 'Already done' };
-  if (a.repeat === 'year' && last === s.year) return { ok: false, reason: 'Done this year' };
-  if (a.time > s.actionsLeft) return { ok: false, reason: a.time === 1 ? 'No free time left' : `Needs ${a.time} free-time slots` };
   return { ok: true };
 }
 
@@ -83,16 +86,18 @@ export function performAction(prev: GameState, id: string, choiceIndex = 0, targ
   const choice = a.choices[choiceIndex];
   const before = snapshotFor(s, targetId);
   if (choice.cost) s.character.money -= choice.cost;
-  s.actionsLeft -= a.time;
   s.actionLog[keyFor(a.id, targetId)] = s.year;
+  const fk = keyFor(a.id, targetId);
+  const nDone = s.yearActs[fk] ?? 0;
+  s.yearActs[fk] = nDone + 1;
 
   const outcome =
     weightedPick(s, choice.outcomes, (o) => (o.weight ?? 1) + (o.bias ? (o.bias.amt * (s.character.stats[o.bias.k] - 50)) / 50 : 0)) ??
     choice.outcomes[0];
-  const ctx = { targetId, died: undefined as string | undefined };
-  applyEffects(s, outcome.effects, ctx);
+  const ctx = { targetId, died: undefined as string | undefined, notes: [] as string[] };
+  applyEffects(s, fatigue(outcome.effects, nDone), ctx);
   const target = s.relationships.find((r) => r.id === ctx.targetId);
-  const text = fill(s, outcome.text, target);
+  const text = fill(s, outcome.text, target) + (ctx.notes.length ? ' ' + ctx.notes.join(' ') : '') + (nDone >= 2 ? ' (You are getting diminishing returns from repeating this.)' : '');
 
   const title = a.choices.length > 1 ? `${a.label}: ${choice.label}` : a.label;
   presentResult(s, { title, cat: GROUP_CAT[a.group], text, before, targetId: ctx.targetId });
@@ -100,6 +105,60 @@ export function performAction(prev: GameState, id: string, choiceIndex = 0, targ
   if (ctx.died) kill(s, ctx.died);
   return s;
 }
+
+/** Doing the same thing again and again this year works less well. Never a hard limit, just realism. */
+export function fatigueFactor(n: number): number {
+  return n <= 0 ? 1 : Math.max(0.25, 1 / (1 + 0.6 * n));
+}
+function fatigue(effects: Effect[], n: number): Effect[] {
+  if (n <= 0) return effects;
+  const f = fatigueFactor(n);
+  return effects.map((e) => {
+    if ((e.t === 'stat' || e.t === 'skill' || e.t === 'rel' || e.t === 'perf' || e.t === 'gpa') && e.d > 0) return { ...e, d: Math.max(1, Math.round(e.d * f)) } as Effect;
+    return e;
+  });
+}
+
+// ───────── wizards (pick-your-option flows) ─────────
+
+export function wizardStatus(s: GameState, w: WizardDef): Status {
+  if (s.phase !== 'alive' || s.queue.length > 0) return { ok: false, reason: 'Finish what is happening first' };
+  const jailed = !!s.legal.prison;
+  if (jailed && w.group !== 'prison') return { ok: false, reason: 'Not possible in prison' };
+  if (!jailed && w.group === 'prison') return { ok: false, reason: 'Not available right now' };
+  if (s.character.age < w.minAge) return { ok: false, reason: `Age ${w.minAge}+` };
+  if (w.maxAge !== undefined && s.character.age > w.maxAge) return { ok: false, reason: 'Too late for this' };
+  if (!checkAll(s, w.requires, true)) return { ok: false, reason: 'Not available right now' };
+  return { ok: true };
+}
+
+/** The next screen of a wizard, or null if the picks are complete. Safe to call while rendering (never uses the game's RNG). */
+export function wizardStep(s: GameState, wizId: string, picks: string[]): WizStep | null {
+  const w = getWizard(wizId);
+  return w ? w.steps(s, picks) : null;
+}
+
+export function wizardRun(prev: GameState, wizId: string, picks: string[]): GameState {
+  const w = getWizard(wizId);
+  if (!w || !wizardStatus(prev, w).ok) return prev;
+  const s = clone(prev);
+  const before = snapshotFor(s);
+  const res = w.run(s, picks);
+  const ctx = { targetId: res.targetId, died: undefined as string | undefined, notes: [] as string[] };
+  applyEffects(s, res.effects, ctx);
+  const text = res.text + (ctx.notes.length ? ' ' + ctx.notes.join(' ') : '');
+  presentResult(s, { title: res.title, cat: res.cat, text, before, targetId: ctx.targetId });
+  addFeed(s, `${res.title}. ${text}`, 'choice', res.cat);
+  queueArrest(s);
+  if (ctx.died) kill(s, ctx.died);
+  return s;
+}
+export function refreshPool(prev: GameState, key: string): GameState {
+  const s = clone(prev);
+  s.pools[key] = (s.pools[key] ?? 0) + 1;
+  return s;
+}
+export { WIZARDS };
 
 // ───────── job board ─────────
 
@@ -120,7 +179,9 @@ export function jobCheck(s: GameState, f: Field): JobCheck {
   if (r.skill && ch.skills[r.skill[0]] < r.skill[1]) reasons.push(`${cap(r.skill[0])} ${r.skill[1]}+`);
   (r.flags ?? []).forEach((fl, i) => { if (!ch.flags[fl]) reasons.push(r.flagLabels?.[i] ?? fl); });
   const st = ch.stats;
-  let p = 0.78 - f.difficulty * 0.62 + (st.smarts - 50) / 260 + (st.reputation - 50) / 320 + (ch.skills.charisma - 30) / 320;
+  const L = s.legal;
+  if (L.record.some((x) => x.sev >= 4) && !['trades', 'service', 'retail', 'business', 'creative'].includes(f.id)) reasons.push('Clean record');
+  let p = 0.78 - f.difficulty * 0.62 - (L.record.length ? 0.1 : 0) + (st.smarts - 50) / 260 + (st.reputation - 50) / 320 + (ch.skills.charisma - 30) / 320;
   if (ch.flags.reference) p += 0.12;
   if (r.skill) p += (ch.skills[r.skill[0]] - r.skill[1]) / 250;
   p = Math.max(0.06, Math.min(0.93, p));
@@ -131,15 +192,17 @@ const eduName = (e: string) => ({ none: 'Anything', highschool: 'High school dip
 
 export function applyForJob(prev: GameState, fieldId: string): GameState {
   const f = FIELD_BY_ID[fieldId];
-  if (!f || prev.phase !== 'alive' || prev.queue.length > 0 || prev.actionsLeft < 1) return prev;
+  if (!f || prev.phase !== 'alive' || prev.queue.length > 0 || prev.legal.prison) return prev;
   const chk = jobCheck(prev, f);
   if (!chk.ok) return prev;
   if (prev.character.job?.field === fieldId && !prev.character.retired) return prev;
 
   const s = clone(prev);
   const before = snapshotFor(s);
-  s.actionsLeft -= 1;
-  const hired = weightedPick(s, [true, false], (x) => (x ? chk.chance : 1 - chk.chance)) ?? false;
+  const tries = s.yearActs[`apply:${fieldId}`] ?? 0;
+  s.yearActs[`apply:${fieldId}`] = tries + 1;
+  const odds = Math.max(0.03, chk.chance * Math.pow(0.8, tries));
+  const hired = weightedPick(s, [true, false], (x) => (x ? odds : 1 - odds)) ?? false;
   const old = s.character.job;
   if (hired) {
     applyEffects(s, [{ t: 'hire', field: fieldId }, { t: 'stat', k: 'happiness', d: 4 }]);
@@ -173,6 +236,7 @@ export function buyCheck(s: GameState, itemId: string, mode: 'cash' | 'finance')
   const yearly = it.finance ? amortize(it.price - down, it.finance.rate, it.finance.years) : 0;
   const base = { cashPrice: it.price, downPayment: down, yearly, canFinance };
   if (s.phase !== 'alive' || s.queue.length > 0) return { ok: false, reason: 'Finish what is happening first', ...base };
+  if (s.legal.prison) return { ok: false, reason: 'Not possible in prison', ...base };
   if (s.character.age < it.minAge) return { ok: false, reason: `Age ${it.minAge}+`, ...base };
   if (!checkAll(s, it.requires, true)) return { ok: false, reason: it.requireText ?? 'Requirements not met', ...base };
   if (mode === 'finance') {
@@ -233,7 +297,7 @@ export function sellAsset(prev: GameState, assetId: string): GameState {
 
 // ───────── simulation helper: a player who tries things ─────────
 
-export function autoPlayer(start: GameState, untilAge: number, opts: { activity?: number } = {}): GameState {
+export function autoPlayer(start: GameState, untilAge: number, opts: { activity?: number; crime?: number } = {}): GameState {
   let s = start;
   let guard = 0;
   const activity = opts.activity ?? 0.7;
@@ -264,7 +328,21 @@ export function autoPlayer(start: GameState, untilAge: number, opts: { activity?
         const it = items[Math.floor(Math.random() * items.length)];
         const mode = Math.random() < 0.5 ? 'finance' : 'cash';
         s = buyAsset(s, it.id, mode);
-      } else if (r < 0.37 && s.assets.length) {
+      } else if (r < 0.52) {
+        const ws = WIZARDS.filter((w) => wizardStatus(s, w).ok && (w.group !== 'crime' || Math.random() < (opts.crime ?? 0.15)));
+        if (ws.length) {
+          const w = ws[Math.floor(Math.random() * ws.length)];
+          const picks: string[] = [];
+          for (let k = 0; k < 6; k++) {
+            const step = wizardStep(s, w.id, picks);
+            if (!step) break;
+            const ok = step.options.filter((o) => !o.disabled);
+            if (!ok.length) { picks.length = 0; break; }
+            picks.push(ok[Math.floor(Math.random() * ok.length)].id);
+          }
+          if (picks.length) s = wizardRun(s, w.id, picks);
+        }
+      } else if (r < 0.57 && s.assets.length) {
         s = sellAsset(s, s.assets[Math.floor(Math.random() * s.assets.length)].id);
       } else {
         // random person action or general action

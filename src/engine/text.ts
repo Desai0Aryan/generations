@@ -14,6 +14,8 @@ export function fill(s: GameState, text: string, target?: Relationship): string 
     parent: first('parent'),
     friend: first('friend') ?? target?.name,
     child: first('child'),
+    case: s.legal?.case?.label,
+    years: String(s.legal?.prison?.yearsLeft ?? 0),
   };
   return text.replace(/\{(\w+)\}/g, (m, k: string) => map[k] ?? m);
 }

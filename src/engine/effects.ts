@@ -4,12 +4,14 @@ import { FIRST_NAMES } from './names.ts';
 import { freshName, int, uid } from './rng.ts';
 import { fill } from './text.ts';
 import { amortize } from './finance.ts';
+import { applyVerdict, release } from './legal.ts';
 import { FIELD_BY_ID } from '../content/jobs.ts';
 import { MAJORS, TIER_INFO } from '../content/education.ts';
 
 export interface EffectContext {
   targetId?: string;
   died?: string;
+  notes?: string[];
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
@@ -163,6 +165,34 @@ export function applyEffects(s: GameState, effects: Effect[], ctx: EffectContext
           if (a) a.loanId = undefined;
         }
         s.loans = s.loans.filter((x) => x.balance > 0);
+        break;
+      }
+      case 'heat':
+        s.legal.heat = clamp(s.legal.heat + e.d);
+        break;
+      case 'verdict':
+        ctx.notes = ctx.notes ?? [];
+        applyVerdict(s, e.mode, ctx.notes);
+        break;
+      case 'release':
+        release(s, 'parole');
+        break;
+      case 'sentence': {
+        const p = s.legal.prison;
+        if (p) {
+          p.yearsLeft = Math.max(0, p.yearsLeft + e.d);
+          p.total = Math.max(p.total, p.yearsLeft);
+          if (p.yearsLeft <= 0) release(s, 'served');
+        }
+        break;
+      }
+      case 'conduct':
+        if (s.legal.prison) s.legal.prison.conduct = clamp(s.legal.prison.conduct + e.d);
+        break;
+      case 'sportLevel': {
+        const list = ch.sports ?? [];
+        const x = e.id ? list.find((q) => q.id === e.id) : list[0];
+        if (x) x.level = Math.max(0, Math.min(6, x.level + e.d));
         break;
       }
       case 'die':

@@ -63,6 +63,8 @@ export type Condition =
   | { t: 'debt'; op: Cmp; v: number }
   | { t: 'perf'; op: Cmp; v: number }
   | { t: 'worth'; op: Cmp; v: number }
+  | { t: 'legal'; is: 'prison' | 'free' | 'probation' | 'record' | 'felon' | 'fugitive' | 'case' }
+  | { t: 'sport'; level: number }
   | { t: 'not'; c: Condition }
   | { t: 'any'; cs: Condition[] };
 
@@ -90,6 +92,12 @@ export type Effect =
   | { t: 'quit' }
   | { t: 'retire' }
   | { t: 'edu'; level: Education }
+  | { t: 'heat'; d: number }
+  | { t: 'verdict'; mode: 'pd' | 'lawyer' | 'elite' | 'plea' | 'bribe' | 'run' | 'innocent' }
+  | { t: 'release' }
+  | { t: 'sentence'; d: number }
+  | { t: 'conduct'; d: number }
+  | { t: 'sportLevel'; id?: string; d: number }
   | { t: 'die'; cause: string };
 
 export interface TargetFilter {
@@ -125,6 +133,7 @@ export type EventCategory =
   | 'health'
   | 'money'
   | 'legacy'
+  | 'crime'
   | 'life';
 
 export interface EventDef {
@@ -153,6 +162,10 @@ export interface Relationship {
   closeness: number; // 0-100
   alive: boolean;
   tags: string[];
+  gender?: string;
+  traits?: string[];
+  job?: string;
+  looks?: number;
 }
 
 export interface Memory {
@@ -183,6 +196,8 @@ export interface School {
   gpa: number;
   degree?: string;
 }
+
+export interface SportEntry { id: string; pos: string; level: number; years: number; titles: number }
 
 export type AssetKind = 'car' | 'home' | 'luxury' | 'pet';
 
@@ -223,6 +238,7 @@ export interface Character {
   education: Education;
   skills: Skills;
   major?: string;
+  sports?: SportEntry[];
   school?: School;
   job: Job | null;
   lastJob?: string;
@@ -279,6 +295,26 @@ export interface Family {
   familyReputation: number;
 }
 
+export interface CrimeRecord { crimeId: string; label: string; year: number; outcome: string; sev: number }
+export interface Case { crimeId: string; label: string; sev: number; evidence: number; year: number; partner?: string; innocent?: boolean }
+export interface Legal {
+  heat: number; // 0-100, how much attention you draw
+  record: CrimeRecord[];
+  uncaught: Case[]; // crimes nobody has pinned on you yet. They can resurface.
+  case?: Case; // the case you are currently facing
+  prison?: { yearsLeft: number; total: number; facility: string; conduct: number; crew: boolean; reason: string };
+  probation?: number; // years left
+  fugitive?: boolean;
+  underworld: number; // 0-100 street reputation
+}
+
+export interface Look {
+  skin: number; face: number; hair: string; hairColor: number; eyes: number; brow: number; nose: number; lips: number;
+  facial: string; freckles: boolean; build: number;
+}
+export interface Outfit { top: string; outer?: string; hat?: string; glasses?: string; ears?: string; neck?: string; bg: string; makeup?: string }
+export interface Wardrobe { look: Look; outfit: Outfit; owned: string[] }
+
 export type Phase = 'alive' | 'dead';
 
 export interface GameState {
@@ -298,6 +334,10 @@ export interface GameState {
   assets: Asset[];
   loans: Loan[];
   actionLog: Record<string, number>; // actionId(+target) -> last year it was done
+  yearActs: Record<string, number>; // how many times each action was done this year (diminishing returns)
+  pools: Record<string, number>; // refresh counters for meet-people candidate pools
+  legal: Legal;
+  wardrobe: Wardrobe;
   nextId: number;
 }
 
@@ -312,11 +352,11 @@ export interface NewGameOptions {
   startYear?: number;
 }
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SLOTS_PER_YEAR = 5;
 
 // ───────── Player actions (the 'Do' tab) ─────────
-export type ActionGroup = 'love' | 'social' | 'school' | 'career' | 'sports' | 'money' | 'health' | 'family' | 'life';
+export type ActionGroup = 'love' | 'social' | 'school' | 'career' | 'sports' | 'money' | 'health' | 'family' | 'life' | 'crime' | 'prison';
 
 export interface ActionDef {
   id: string;
@@ -333,4 +373,22 @@ export interface ActionDef {
   pack?: string;
   /** one choice => performs immediately; several => the player picks */
   choices: ChoiceDef[];
+}
+
+// ───────── Wizards: multi-step "pick what you want" flows (choose a sport, browse people to date, plan a heist...) ─────────
+export interface WizOption {
+  id: string; label: string; sub?: string; icon?: string; badge?: string; cost?: number; disabled?: string;
+  portrait?: { name: string; age: number; gender?: string; looks?: number };
+  meter?: { label: string; value: number };
+  tags?: string[];
+}
+export interface WizStep { title: string; sub?: string; options: WizOption[]; refresh?: string; multi?: boolean }
+export interface WizResult { title: string; cat: EventCategory; text: string; effects: Effect[]; targetId?: string }
+export interface WizardDef {
+  id: string; group: ActionGroup; icon: string; label: string; hint: string; minAge: number; maxAge?: number;
+  requires?: Condition[];
+  /** return the next step to show for the picks so far, or null when you have enough to run */
+  steps: (s: GameState, picks: string[]) => WizStep | null;
+  /** s is a working copy: you may use rng and mutate it. Return what happened. */
+  run: (s: GameState, picks: string[]) => WizResult;
 }

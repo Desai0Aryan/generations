@@ -16,6 +16,10 @@ export function ownedPackIds(e: Entitlements): string[] {
   return PRODUCTS.filter((p) => p.kind === 'pack' && e.owned.includes(p.id)).map((p) => p.refId);
 }
 
+export function ownedCosmetics(e: Entitlements): string[] {
+  return PRODUCTS.filter((p) => p.kind === 'cosmetic' && e.owned.includes(p.id)).map((p) => p.refId);
+}
+
 export function owns(e: Entitlements, p: Product): boolean {
   return e.owned.includes(p.id);
 }
